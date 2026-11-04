@@ -4,115 +4,102 @@ from datetime import datetime
 
 class DatabaseManager:
     def __init__(self):
-        """Initializes the database path and builds tables upon creation."""
-        self.db_path = os.path.join(os.path.dirname(__file__), "projectbb.db")
+        # Maps the DB to the executable's folder to ensure data persistence after packaging
+        self.db_path = os.path.join(os.getcwd(), "projectbb.db")
         self.init_db()
 
     def _get_connection(self):
-        """Establishes and returns a connection to the local SQLite database."""
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # Access columns by name
+        conn.row_factory = sqlite3.Row
         return conn
 
     def init_db(self):
-        """Creates the core database tables if they do not already exist."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-            # 1. Menu Items / SKUs Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT CHECK(role IN ('Admin', 'Staff')) NOT NULL
+                )
+            """)
+            
+            # Added image_path column to the inventory schema
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS inventory (
                     sku TEXT PRIMARY KEY, 
-                    name TEXT NOT NULL,
+                    name TEXT NOT NULL, 
                     price REAL NOT NULL, 
-                    stock_qty INTEGER NOT NULL
+                    stock_qty INTEGER NOT NULL,
+                    image_path TEXT DEFAULT ''
                 )
             """)
             
-            # 2. Daily Sequence Tracking Table (For Automated Resets)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS daily_sequence (
-                    date_str TEXT PRIMARY KEY, 
-                    last_sequence INTEGER NOT NULL
-                )
-            """)
-            
-            # 3. Orders Master Table (FIFO Queue Tracking)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS orders (
                     order_id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                    sequence_number INTEGER NOT NULL,
-                    order_date TEXT NOT NULL,
+                    sequence_number INTEGER NOT NULL, 
+                    status TEXT NOT NULL, 
                     total_amount REAL NOT NULL, 
-                    status TEXT DEFAULT 'PENDING'
+                    order_date TEXT NOT NULL
                 )
             """)
             
-            # 4. Order Line Items Table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS order_items (
-                    item_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    order_id INTEGER NOT NULL,
-                    sku TEXT NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    price_per_unit REAL NOT NULL,
-                    FOREIGN KEY (order_id) REFERENCES orders (order_id),
-                    FOREIGN KEY (sku) REFERENCES inventory (sku)
+                    item_id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                    order_id INTEGER, 
+                    sku TEXT, 
+                    quantity INTEGER, 
+                    FOREIGN KEY(order_id) REFERENCES orders(order_id)
                 )
             """)
+
+            cursor.execute("INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("admin", "admin123", "Admin"))
+            cursor.execute("INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("staff", "staff123", "Staff"))
+            
+            cursor.execute("SELECT COUNT(*) FROM inventory")
+            if cursor.fetchone()[0] == 0:
+                # Injects default test items mapped to hypothetical image paths
+                cursor.execute("INSERT INTO inventory VALUES ('SKU01', 'Test Burger', 50.0, 100, 'assets/burger.png'), ('SKU02', 'Test Fries', 30.0, 100, 'assets/fries.png')")
             conn.commit()
 
-    def get_next_sequence_number(self):
-        """Generates a non-repeating order sequence number that resets daily."""
-        today = datetime.now().strftime("%Y-%m-%d")
+    def add_inventory_item(self, sku, name, price, stock_qty, image_path=""):
+        """Inserts or updates an inventory item with its associated image path."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT last_sequence FROM daily_sequence WHERE date_str = ?", (today,))
-            row = cursor.fetchone()
-            next_seq = 1 if row is None else row["last_sequence"] + 1
-            
-            if row is None:
-                cursor.execute("INSERT INTO daily_sequence VALUES (?, ?)", (today, next_seq))
-            else:
-                cursor.execute("UPDATE daily_sequence SET last_sequence = ? WHERE date_str = ?", (next_seq, today))
-            
-            conn.commit()
-            return next_seq
-
-    def create_order(self, cart_items, total_amount):
-        """Logs transaction, deducts SKU stock in real time, and assigns sequence number."""
-        today_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        seq_num = self.get_next_sequence_number()
-        
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Insert main order record
             cursor.execute(
-                "INSERT INTO orders (sequence_number, order_date, total_amount, status) VALUES (?, ?, ?, 'PENDING')",
-                (seq_num, today_time, total_amount)
+                "INSERT OR REPLACE INTO inventory (sku, name, price, stock_qty, image_path) VALUES (?, ?, ?, ?, ?)",
+                (sku, name, price, stock_qty, image_path)
             )
+            conn.commit()
+            
+    def add_user(self, username, password_hash, role):
+        """Creates a new user account if the username does not already exist."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                (username, password_hash, role)
+            )
+            conn.commit()
+
+    def create_order(self, cart_list, total_amount):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            today = datetime.now().strftime("%Y-%m-%d")
+            cursor.execute("SELECT MAX(sequence_number) FROM orders WHERE order_date LIKE ?", (today + '%',))
+            max_seq = cursor.fetchone()[0]
+            seq_num = 1 if max_seq is None else max_seq + 1
+            
+            date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("INSERT INTO orders (sequence_number, status, total_amount, order_date) VALUES (?, ?, ?, ?)", (seq_num, 'PENDING', total_amount, date_str))
             order_id = cursor.lastrowid
             
-            # Insert items & deduct stock
-            for item in cart_items:
-                sku = item["sku"]
-                qty = item["quantity"]
-                price = item["price"]
-                
-                cursor.execute(
-                    "INSERT INTO order_items (order_id, sku, quantity, price_per_unit) VALUES (?, ?, ?, ?)",
-                    (order_id, sku, qty, price)
-                )
-                cursor.execute(
-                    "UPDATE inventory SET stock_qty = stock_qty - ? WHERE sku = ?",
-                    (qty, sku)
-                )
+            for item in cart_list:
+                cursor.execute("INSERT INTO order_items (order_id, sku, quantity) VALUES (?, ?, ?)", (order_id, item['sku'], item['quantity']))
+                cursor.execute("UPDATE inventory SET stock_qty = stock_qty - ? WHERE sku = ?", (item['quantity'], item['sku']))
             conn.commit()
             return order_id, seq_num
-
-
-# Execution block: This runs only when the script is executed directly in the terminal
-if __name__ == "__main__":
-    db = DatabaseManager()
-    print(f"✅ Database initialized successfully at: {db.db_path}")
