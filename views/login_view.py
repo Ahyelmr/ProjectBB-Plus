@@ -3,23 +3,63 @@ from tkinter import messagebox
 
 class LoginFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        # Inherit the main background color from the centralized theme
+        super().__init__(parent, fg_color=controller.colors["bg_main"])
         self.controller = controller
         
-        self.center_frame = ctk.CTkFrame(self, width=400, height=400)
-        self.center_frame.place(relx=0.5, rely=0.5, anchor="center")
+        # Responsive centering: weights push the center cell (row 1, column 1) to the middle
+        self.grid_rowconfigure((0, 2), weight=1)
+        self.grid_columnconfigure((0, 2), weight=1)
         
-        self.title_label = ctk.CTkLabel(self.center_frame, text="ProjectBB Plus", font=("Arial", 28, "bold"))
-        self.title_label.pack(pady=(40, 20))
+        # Replaces center_frame with a styled card container
+        self.login_card = ctk.CTkFrame(
+            self, 
+            fg_color=controller.colors["bg_card"],
+            border_width=2,
+            border_color=controller.colors["border"],
+            corner_radius=15
+        )
+        self.login_card.grid(row=1, column=1, padx=20, pady=20, ipadx=40, ipady=40)
         
-        self.username_entry = ctk.CTkEntry(self.center_frame, width=250, placeholder_text="Username")
+        self.title_label = ctk.CTkLabel(
+            self.login_card, 
+            text="ProjectBB Plus", 
+            font=self.controller.fonts["title"],
+            text_color=self.controller.colors["text_main"]
+        )
+        self.title_label.pack(pady=(20, 20))
+        
+        self.username_entry = ctk.CTkEntry(
+            self.login_card, 
+            width=280, 
+            height=45, 
+            placeholder_text="Username",
+            font=self.controller.fonts["body"]
+        )
         self.username_entry.pack(pady=10)
         
-        self.password_entry = ctk.CTkEntry(self.center_frame, width=250, placeholder_text="Password", show="*")
+        self.password_entry = ctk.CTkEntry(
+            self.login_card, 
+            width=280, 
+            height=45, 
+            placeholder_text="Password", 
+            show="*",
+            font=self.controller.fonts["body"]
+        )
         self.password_entry.pack(pady=10)
         
-        self.login_button = ctk.CTkButton(self.center_frame, text="Login", width=250, command=self.attempt_login)
-        self.login_button.pack(pady=(20, 40))
+        self.login_button = ctk.CTkButton(
+            self.login_card, 
+            text="Login", 
+            width=280, 
+            height=45, 
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["primary"],
+            hover_color=self.controller.colors["primary_hover"],
+            command=self.attempt_login
+        )
+        self.login_button.pack(pady=(20, 20))
+        
         self.password_entry.bind("<Return>", lambda event: self.attempt_login())
 
     def attempt_login(self):
@@ -40,6 +80,7 @@ class LoginFrame(ctk.CTkFrame):
             self.username_entry.delete(0, 'end')
             self.password_entry.delete(0, 'end')
             
+            # Dynamically adjusts layout based on the active role
             self.controller.frames["CashierFrame"].update_admin_features()
             self.controller.show_frame("CashierFrame")
         else:

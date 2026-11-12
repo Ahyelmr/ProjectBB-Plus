@@ -5,25 +5,75 @@ from datetime import datetime
 
 class ProgressFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        # Inherit the main background color from the centralized theme
+        super().__init__(parent, fg_color=controller.colors["bg_main"])
         self.controller = controller
+        
+        # Center list expands vertically, filling space between top and bottom bars
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
         
-        self.top_bar = ctk.CTkFrame(self)
+        # Top Navigation Bar
+        self.top_bar = ctk.CTkFrame(self, fg_color="transparent")
         self.top_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        ctk.CTkButton(self.top_bar, text="Back to Cashier", width=120, command=lambda: controller.show_frame("CashierFrame")).pack(side="left", padx=10, pady=10)
-        ctk.CTkLabel(self.top_bar, text="Daily Progress & Transaction Log", font=("Arial", 20, "bold")).pack(side="left", expand=True)
-        ctk.CTkButton(self.top_bar, text="Refresh Data", width=120, command=self.load_daily_data).pack(side="right", padx=10, pady=10)
         
-        self.data_frame = ctk.CTkScrollableFrame(self, label_text="Completed Transactions Today")
+        ctk.CTkButton(
+            self.top_bar, 
+            text="Back to Cashier", 
+            width=120, 
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["primary"],
+            hover_color=self.controller.colors["primary_hover"],
+            command=lambda: controller.show_frame("CashierFrame")
+        ).pack(side="left", padx=10, pady=10)
+        
+        ctk.CTkLabel(
+            self.top_bar, 
+            text="Daily Progress & Transaction Log", 
+            font=self.controller.fonts["title"],
+            text_color=self.controller.colors["text_main"]
+        ).pack(side="left", expand=True)
+        
+        ctk.CTkButton(
+            self.top_bar, 
+            text="Refresh Data", 
+            width=120, 
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["primary"],
+            hover_color=self.controller.colors["primary_hover"],
+            command=self.load_daily_data
+        ).pack(side="right", padx=10, pady=10)
+        
+        # Data Display Area
+        self.data_frame = ctk.CTkScrollableFrame(
+            self, 
+            label_text="Completed Transactions Today",
+            label_font=self.controller.fonts["header"],
+            label_text_color=self.controller.colors["text_main"],
+            fg_color=self.controller.colors["bg_card"]
+        )
         self.data_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
         
-        self.bottom_bar = ctk.CTkFrame(self)
+        # Bottom Export Bar
+        self.bottom_bar = ctk.CTkFrame(self, fg_color="transparent")
         self.bottom_bar.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
-        self.total_revenue_label = ctk.CTkLabel(self.bottom_bar, text="Total Daily Revenue: ₱0.00", font=("Arial", 18, "bold"))
+        
+        self.total_revenue_label = ctk.CTkLabel(
+            self.bottom_bar, 
+            text="Total Daily Revenue: ₱0.00", 
+            font=self.controller.fonts["header"],
+            text_color=self.controller.colors["text_main"]
+        )
         self.total_revenue_label.pack(side="left", padx=20, pady=10)
-        ctk.CTkButton(self.bottom_bar, text="Export to CSV", fg_color="green", hover_color="darkgreen", command=self.export_csv).pack(side="right", padx=20, pady=10)
+        
+        ctk.CTkButton(
+            self.bottom_bar, 
+            text="Export to CSV", 
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["accent_green"], 
+            hover_color=self.controller.colors["green_hover"], 
+            command=self.export_csv
+        ).pack(side="right", padx=20, pady=10)
         
         self.daily_orders = []
 
@@ -41,7 +91,13 @@ class ProgressFrame(ctk.CTkFrame):
         for idx, order in enumerate(self.daily_orders):
             total_revenue += order["total_amount"]
             row_text = f"Seq #{order['sequence_number']} | Time: {order['order_date']} | Total: ₱{order['total_amount']:.2f}"
-            ctk.CTkLabel(self.data_frame, text=row_text, font=("Arial", 14)).grid(row=idx, column=0, sticky="w", pady=2, padx=10)
+            
+            ctk.CTkLabel(
+                self.data_frame, 
+                text=row_text, 
+                font=self.controller.fonts["body"],
+                text_color=self.controller.colors["text_muted"]
+            ).grid(row=idx, column=0, sticky="w", pady=2, padx=10)
             
         self.total_revenue_label.configure(text=f"Total Daily Revenue: ₱{total_revenue:.2f}")
 

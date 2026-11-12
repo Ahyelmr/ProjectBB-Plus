@@ -6,41 +6,82 @@ from utils import get_resource_path
 
 class CashierFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        # Inherit main background color from theme
+        super().__init__(parent, fg_color=controller.colors["bg_main"])
         self.controller = controller
         self.cart = {}
         
         # 3-Column Layout: Menu (weight 2) | Cart & Checkout (weight 1) | Kitchen Queue (weight 2)
+        # These weights ensure the UI expands proportionally when the window is maximized or resized
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=2)
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=2)
         
         # --- Column 0: Menu Items ---
-        self.menu_frame = ctk.CTkScrollableFrame(self, label_text="Menu Items")
+        self.menu_frame = ctk.CTkScrollableFrame(
+            self, 
+            label_text="Menu Items",
+            label_font=self.controller.fonts["header"],
+            label_text_color=self.controller.colors["text_main"],
+            fg_color=self.controller.colors["bg_card"]
+        )
         self.menu_frame.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=10)
         
         # --- Column 1: Cart & Cashier Sidebar ---
-        self.sidebar_frame = ctk.CTkFrame(self)
+        self.sidebar_frame = ctk.CTkFrame(self, fg_color=self.controller.colors["bg_card"])
         self.sidebar_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=10)
         self.sidebar_frame.grid_rowconfigure(1, weight=1)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
         
-        ctk.CTkLabel(self.sidebar_frame, text="Current Order", font=("Arial", 18, "bold")).grid(row=0, column=0, pady=10)
-        self.cart_display = ctk.CTkScrollableFrame(self.sidebar_frame, width=220)
+        ctk.CTkLabel(
+            self.sidebar_frame, 
+            text="Current Order", 
+            font=self.controller.fonts["header"],
+            text_color=self.controller.colors["text_main"]
+        ).grid(row=0, column=0, pady=10)
+        
+        self.cart_display = ctk.CTkScrollableFrame(self.sidebar_frame, width=220, fg_color="transparent")
         self.cart_display.grid(row=1, column=0, sticky="nsew", padx=10)
         
-        self.total_label = ctk.CTkLabel(self.sidebar_frame, text="Total: ₱0.00", font=("Arial", 16, "bold"))
+        self.total_label = ctk.CTkLabel(
+            self.sidebar_frame, 
+            text="Total: ₱0.00", 
+            font=self.controller.fonts["header"],
+            text_color=self.controller.colors["text_main"]
+        )
         self.total_label.grid(row=2, column=0, pady=10)
         
-        self.checkout_btn = ctk.CTkButton(self.sidebar_frame, text="Checkout", fg_color="green", hover_color="darkgreen", command=self.process_checkout)
+        self.checkout_btn = ctk.CTkButton(
+            self.sidebar_frame, 
+            text="Checkout", 
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["accent_green"], 
+            hover_color=self.controller.colors["green_hover"], 
+            command=self.process_checkout
+        )
         self.checkout_btn.grid(row=3, column=0, pady=5, padx=15, sticky="ew")
         
-        self.progress_btn = ctk.CTkButton(self.sidebar_frame, text="Daily Progress & Export", fg_color="#b8860b", hover_color="#8b6508", command=lambda: [self.controller.frames["ProgressFrame"].load_daily_data(), controller.show_frame("ProgressFrame")])
-        self.logout_btn = ctk.CTkButton(self.sidebar_frame, text="Logout", fg_color="red", hover_color="darkred", command=lambda: controller.show_frame("LoginFrame"))
+        self.progress_btn = ctk.CTkButton(
+            self.sidebar_frame, 
+            text="Daily Progress & Export", 
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["accent_gold"], 
+            hover_color=self.controller.colors["gold_hover"], 
+            command=lambda: [self.controller.frames["ProgressFrame"].load_daily_data(), controller.show_frame("ProgressFrame")]
+        )
+        
+        self.logout_btn = ctk.CTkButton(
+            self.sidebar_frame, 
+            text="Logout", 
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["accent_red"], 
+            hover_color=self.controller.colors["red_hover"], 
+            command=lambda: controller.show_frame("LoginFrame")
+        )
         
         # --- Column 2: Kitchen Live Queue ---
-        self.kitchen_panel = ctk.CTkFrame(self)
+        self.kitchen_panel = ctk.CTkFrame(self, fg_color=self.controller.colors["bg_card"])
         self.kitchen_panel.grid(row=0, column=2, sticky="nsew", padx=(5, 10), pady=10)
         self.kitchen_panel.grid_rowconfigure(1, weight=1)
         self.kitchen_panel.grid_columnconfigure(0, weight=1)
@@ -49,14 +90,40 @@ class CashierFrame(ctk.CTkFrame):
         # Header bar for Kitchen Queue
         self.k_header = ctk.CTkFrame(self.kitchen_panel, fg_color="transparent")
         self.k_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
-        ctk.CTkLabel(self.k_header, text="Kitchen Live Queue", font=("Arial", 18, "bold")).pack(side="left")
-        ctk.CTkButton(self.k_header, text="Refresh", width=70, command=self.load_kitchen_orders).pack(side="right")
+        ctk.CTkLabel(
+            self.k_header, 
+            text="Kitchen Live Queue", 
+            font=self.controller.fonts["header"],
+            text_color=self.controller.colors["text_main"]
+        ).pack(side="left")
+        
+        ctk.CTkButton(
+            self.k_header, 
+            text="Refresh", 
+            width=70,
+            font=self.controller.fonts["button"],
+            fg_color=self.controller.colors["primary"],
+            hover_color=self.controller.colors["primary_hover"],
+            command=self.load_kitchen_orders
+        ).pack(side="right")
         
         # Sub-columns for Preparing and Ready orders
-        self.prep_column = ctk.CTkScrollableFrame(self.kitchen_panel, label_text="Preparing", label_font=("Arial", 14, "bold"))
+        self.prep_column = ctk.CTkScrollableFrame(
+            self.kitchen_panel, 
+            label_text="Preparing", 
+            label_font=self.controller.fonts["subheader"],
+            label_text_color=self.controller.colors["text_main"],
+            fg_color=self.controller.colors["bg_main"]
+        )
         self.prep_column.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         
-        self.ready_column = ctk.CTkScrollableFrame(self.kitchen_panel, label_text="Ready for Pickup", label_font=("Arial", 14, "bold"))
+        self.ready_column = ctk.CTkScrollableFrame(
+            self.kitchen_panel, 
+            label_text="Ready for Pickup", 
+            label_font=self.controller.fonts["subheader"],
+            label_text_color=self.controller.colors["text_main"],
+            fg_color=self.controller.colors["bg_main"]
+        )
         self.ready_column.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
         
         # Load initial operational data
@@ -106,17 +173,22 @@ class CashierFrame(ctk.CTkFrame):
                 except Exception as e:
                     print(f"Failed to load default asset image: {e}")
 
-            # Step 3: Dynamic in-memory gray placeholder
+            # Step 3: Dynamic in-memory gray placeholder mapped to theme colors
             if btn_image is None:
                 try:
-                    placeholder_pil = Image.new('RGB', (60, 60), color=(50, 54, 62))
+                    # Map RGB tuple closely to the border/bg color from theme
+                    placeholder_pil = Image.new('RGB', (60, 60), color=(42, 59, 92))
                     btn_image = ctk.CTkImage(light_image=placeholder_pil, dark_image=placeholder_pil, size=(60, 60))
                 except Exception as e:
                     print(f"Failed to create dynamic placeholder image: {e}")
 
             btn = ctk.CTkButton(
                 self.menu_frame, 
-                text=btn_text, 
+                text=btn_text,
+                font=self.controller.fonts["menu_item"],
+                fg_color=self.controller.colors["primary"],
+                hover_color=self.controller.colors["primary_hover"],
+                text_color=self.controller.colors["text_main"],
                 image=btn_image, 
                 compound="top", 
                 width=110, 
@@ -148,7 +220,13 @@ class CashierFrame(ctk.CTkFrame):
         for r_idx, (sku, data) in enumerate(self.cart.items()):
             item_total = data['price'] * data['qty']
             total += item_total
-            ctk.CTkLabel(self.cart_display, text=f"{data['qty']}x {data['name']} - ₱{item_total:.2f}", font=("Arial", 12)).grid(row=r_idx, column=0, sticky="w", pady=2)
+            ctk.CTkLabel(
+                self.cart_display, 
+                text=f"{data['qty']}x {data['name']} ₱{item_total:.2f}", 
+                font=self.controller.fonts["body"],
+                text_color=self.controller.colors["text_main"]
+            ).grid(row=r_idx, column=0, sticky="w", pady=2)
+            
         self.total_label.configure(text=f"Total: ₱{total:.2f}")
 
     def process_checkout(self):
@@ -204,29 +282,65 @@ class CashierFrame(ctk.CTkFrame):
                     self.create_ready_card(order_id, seq_num, item_text)
 
     def create_prep_card(self, order_id, seq_num, item_text):
-        card = ctk.CTkFrame(self.prep_column, border_width=1, corner_radius=8)
+        card = ctk.CTkFrame(
+            self.prep_column, 
+            border_width=1, 
+            border_color=self.controller.colors["border"],
+            fg_color=self.controller.colors["bg_card"],
+            corner_radius=8
+        )
         card.pack(fill="x", padx=3, pady=4)
         
-        ctk.CTkLabel(card, text=f"Order #{seq_num}", font=("Arial", 14, "bold")).pack(pady=(4, 0))
-        ctk.CTkLabel(card, text=item_text, justify="left", font=("Arial", 11)).pack(pady=3)
+        ctk.CTkLabel(
+            card, 
+            text=f"Order #{seq_num}", 
+            font=self.controller.fonts["subheader"],
+            text_color=self.controller.colors["text_main"]
+        ).pack(pady=(4, 0))
+        
+        ctk.CTkLabel(
+            card, 
+            text=item_text, 
+            justify="left", 
+            font=self.controller.fonts["small"],
+            text_color=self.controller.colors["text_muted"]
+        ).pack(pady=3)
         
         action_btn = ctk.CTkButton(
             card, 
             text="Move to Ready", 
-            fg_color="orange", 
-            hover_color="darkorange", 
+            fg_color=self.controller.colors["accent_gold"], 
+            hover_color=self.controller.colors["gold_hover"], 
             height=24, 
-            font=("Arial", 11),
+            font=self.controller.fonts["small"],
             command=lambda: [self.controller.queue.mark_order_ready(order_id, seq_num), self.load_kitchen_orders()]
         )
         action_btn.pack(pady=6)
 
     def create_ready_card(self, order_id, seq_num, item_text):
-        card = ctk.CTkFrame(self.ready_column, border_width=1, corner_radius=8, fg_color="#2b2b2b")
+        card = ctk.CTkFrame(
+            self.ready_column, 
+            border_width=1, 
+            border_color=self.controller.colors["border"],
+            corner_radius=8, 
+            fg_color=self.controller.colors["bg_card"]
+        )
         card.pack(fill="x", padx=3, pady=4)
         
-        ctk.CTkLabel(card, text=f"Order #{seq_num}", font=("Arial", 14, "bold"), text_color="cyan").pack(pady=(4, 0))
-        ctk.CTkLabel(card, text=item_text, justify="left", font=("Arial", 11)).pack(pady=3)
+        ctk.CTkLabel(
+            card, 
+            text=f"Order #{seq_num}", 
+            font=self.controller.fonts["subheader"], 
+            text_color=self.controller.colors["accent_green"]
+        ).pack(pady=(4, 0))
+        
+        ctk.CTkLabel(
+            card, 
+            text=item_text, 
+            justify="left", 
+            font=self.controller.fonts["small"],
+            text_color=self.controller.colors["text_muted"]
+        ).pack(pady=3)
         
         btn_frame = ctk.CTkFrame(card, fg_color="transparent")
         btn_frame.pack(pady=6)
@@ -234,10 +348,11 @@ class CashierFrame(ctk.CTkFrame):
         announce_btn = ctk.CTkButton(
             btn_frame, 
             text="Call", 
-            fg_color="blue", 
+            fg_color=self.controller.colors["primary"], 
+            hover_color=self.controller.colors["primary_hover"],
             width=50, 
             height=24, 
-            font=("Arial", 11),
+            font=self.controller.fonts["small"],
             command=lambda: self.controller.queue._play_announcement(seq_num)
         )
         announce_btn.pack(side="left", padx=2)
@@ -245,11 +360,11 @@ class CashierFrame(ctk.CTkFrame):
         complete_btn = ctk.CTkButton(
             btn_frame, 
             text="Done", 
-            fg_color="green", 
-            hover_color="darkgreen", 
+            fg_color=self.controller.colors["accent_green"], 
+            hover_color=self.controller.colors["green_hover"], 
             width=50, 
             height=24, 
-            font=("Arial", 11),
+            font=self.controller.fonts["small"],
             command=lambda: [self.controller.queue.complete_order(order_id), self.load_kitchen_orders()]
         )
         complete_btn.pack(side="right", padx=2)
