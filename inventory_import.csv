@@ -1,0 +1,47 @@
+sku,name,price,category,image_path
+CN89,Cheesy Nachos,89,Appetizers,cheesy_nachos.png
+NO99,Nachos Overload,99,Appetizers,nachos_overload.png
+MP79,Mojo Potato,79,Appetizers,mojo_potato.png
+EE99,Embutido & Egg,99,Breakfast Meals,embutido_&_egg.png
+SE119,Spam & Egg,119,Breakfast Meals,spam_&_egg.png
+CE109,Corned Beef & Egg,109,Breakfast Meals,corned_beef_&_egg.png
+SB119,Sausage & Beans,119,Breakfast Meals,sausage_&_beans.png
+SBS99,Stuff Breadsticks,99,Sandwiches,stuff_breadsticks.png
+SHB99,Shawarma Beef,99,Sandwiches,shawarma_beef.png
+SHC89,Shawarma Chicken,89,Sandwiches,shawarma_chicken.png
+CQ89,Chicken Quesadilla,89,Sandwiches,chicken_quesadilla.png
+BQ99,Beef Quesadilla,99,Sandwiches,beef_quesadilla.png
+TKS99,Tori Katsu Sandwich,99,Sandwiches,tori_katsu_sandwich.png
+HSP79,Hotdog Sandwich Plain,79,Sandwiches,hotdog_sandwich_plain.png
+HSO89,Hotdog Sandwich Overload,89,Sandwiches,hotdog_sandwich_overload.png
+HSS99,Hungarian Sausage Sandwich,99,Sandwiches,hungarian_sausage_sandwich.png
+KCD90,Korean Corn Dog,90,Sandwiches,korean_corn_dog.png
+KB139,Korean Bibimbap,139,Rice Meals,korean_bibimbap.png
+BY139,Beef Yakiniku,139,Rice Meals,beef_yakiniku.png
+CSR119,Chicken Shawarma Rice,119,Rice Meals,chicken_shawarma_rice.png
+BSR129,Beef Shawarma Rice,129,Rice Meals,beef_shawarma_rice.png
+PT139,Pork Tonkatsu,139,Rice Meals,pork_tonkatsu.png
+ET139,Ebi Tempura,139,Rice Meals,ebi_tempura.png
+CP129,Chicken Pastil,129,Binalot,chicken_pastil.png
+PA139,Pork Adobo,139,Binalot,pork_adobo.png
+CA129,Chicken Adobo,129,Binalot,chicken_adobo.png
+BS139,Beef Steak,139,Binalot,beef_steak.png
+PS139,Pork Steak,139,Binalot,pork_steak.png
+SG139,Sisig,139,Binalot,sisig.png
+SL139,Spicy Liempo,139,Binalot,spicy_liempo.png
+BA129,Bangus,129,Binalot,bangus.png
+UR00,Unli Rice,00,Add-ons,unli_rice.png
+UT00,Utensils,00,Add-ons,utensils.png
+FD00,Free Drink,00,Freebies,free_drink.png
+FI00,Free Ice Cream,00,Freebies,free_icecream.png
+CW01,Crunchy Honey Garlic,119,Chicken Wings,crunchy_honey_garlic.png
+CW02,Mango Habanero,139,Chicken Wings,mango_habanero.png
+CW03,Buffalo,129,Chicken Wings,buffalo.png
+CW04,Garlic Parmesan,129,Chicken Wings,garlic_parmesan.png
+CW05,Honey Sriracha,129,Chicken Wings,honey_sriracha.png
+CW06,Dragon Fire,129,Chicken Wings,dragon_fire.png
+CW07,Salted Egg,139,Chicken Wings,salted_egg.png
+CW08,Yangnyeom Style,139,Chicken Wings,yangnyeom_style.png
+CW09,Orange Panda,129,Chicken Wings,orange_panda.png
+CW10,Snow Cheese,139,Chicken Wings,snow_cheese.png
+CW11,Flaming Cheetos,139,Chicken Wings,flaming_cheetos.png

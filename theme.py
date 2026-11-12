@@ -11,7 +11,7 @@ COLOR_THEME = "blue"
 
 # --- Central Color Palette ---
 COLORS = {
-    "bg_main": "#1A1A2E",
+    "bg_main": "#fdc30d",
     "bg_card": "#16213E",
     "primary": "#0F3460",
     "primary_hover": "#1A4B84",
