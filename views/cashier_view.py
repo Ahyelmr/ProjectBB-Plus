@@ -22,6 +22,8 @@ class CashierFrame(ctk.CTkFrame):
         self.cart = {}  # {sku: {'name': name, 'price': price, 'qty': qty, 'category': category}}
         self.current_total = 0.0
         self._last_logo_size = None
+        self._queue_refresh_job = None
+        self._last_queue_snapshot = None
 
         # Main 3-Section Grid Layout
         self.grid_rowconfigure(0, weight=0)
@@ -441,18 +443,37 @@ class CashierFrame(ctk.CTkFrame):
             return
 
         discount_name = self.discount_var.get()
-        self.controller.db.create_order(self.cart, self.current_total, discount_name)
+        seq, order_id = self.controller.db.create_order(self.cart, self.current_total, discount_name)
+
+        # Convert cart dictionary into the list format expected by PrinterManager
+        cart_list = [
+            {
+                "sku": sku,
+                "name": data["name"],
+                "price": data["price"],
+                "quantity": data["qty"]
+            }
+            for sku, data in self.cart.items()
+        ]
+
+        # Send receipt to thermal printer
+        if hasattr(self.controller, "queue") and self.controller.queue:
+            self.controller.queue.printer.print_receipt(seq, cart_list, self.current_total)
+        else:
+            from printer_manager import PrinterManager
+            PrinterManager(printer_name="POS-58").print_receipt(seq, cart_list, self.current_total)
+
         self.cart.clear()
         self.discount_var.set("None")
         self.update_cart_display()
         self.refresh_kitchen_queue()
 
-    def refresh_kitchen_queue(self):
-        """Populates Preparing and Ready for Pickup columns separately."""
-        for widget in self.prep_column.winfo_children():
-            widget.destroy()
-        for widget in self.ready_column.winfo_children():
-            widget.destroy()
+    def refresh_kitchen_queue(self, force=False):
+        """Populates Preparing and Ready for Pickup columns without overlapping timers."""
+        # Cancel any existing scheduled refresh so timers never stack
+        if self._queue_refresh_job is not None:
+            self.after_cancel(self._queue_refresh_job)
+            self._queue_refresh_job = None
 
         with self.controller.db._get_connection() as conn:
             cursor = conn.cursor()
@@ -464,26 +485,38 @@ class CashierFrame(ctk.CTkFrame):
             """)
             orders = cursor.fetchall()
 
-            for order in orders:
-                order_id = order["order_id"]
-                seq_num = order["sequence_number"]
-                status = order["status"]
+            snapshot = [(o["order_id"], o["sequence_number"], o["status"]) for o in orders]
 
-                cursor.execute("""
-                    SELECT inventory.name, order_items.quantity
-                    FROM order_items
-                    JOIN inventory ON order_items.sku = inventory.sku
-                    WHERE order_items.order_id = ?
-                """, (order_id,))
-                items = cursor.fetchall()
-                item_text = "\n".join([f"{row['quantity']}x {row['name']}" for row in items])
+            # Only destroy and rebuild cards when orders or statuses actually change
+            if force or snapshot != self._last_queue_snapshot:
+                self._last_queue_snapshot = snapshot
 
-                if status in ("PREPARING", "PENDING"):
-                    self._create_prep_card(order_id, seq_num, item_text)
-                elif status == "READY":
-                    self._create_ready_card(order_id, seq_num, item_text)
+                for widget in self.prep_column.winfo_children():
+                    widget.destroy()
+                for widget in self.ready_column.winfo_children():
+                    widget.destroy()
 
-        self.after(5000, self.refresh_kitchen_queue)
+                for order in orders:
+                    order_id = order["order_id"]
+                    seq_num = order["sequence_number"]
+                    status = order["status"]
+
+                    cursor.execute("""
+                        SELECT inventory.name, order_items.quantity
+                        FROM order_items
+                        JOIN inventory ON order_items.sku = inventory.sku
+                        WHERE order_items.order_id = ?
+                    """, (order_id,))
+                    items = cursor.fetchall()
+                    item_text = "\n".join([f"{row['quantity']}x {row['name']}" for row in items])
+
+                    if status in ("PREPARING", "PENDING"):
+                        self._create_prep_card(order_id, seq_num, item_text)
+                    elif status == "READY":
+                        self._create_ready_card(order_id, seq_num, item_text)
+
+        # Schedule a single next refresh
+        self._queue_refresh_job = self.after(5000, self.refresh_kitchen_queue)
 
     def _create_prep_card(self, order_id, seq_num, item_text):
         card = ctk.CTkFrame(
@@ -501,7 +534,7 @@ class CashierFrame(ctk.CTkFrame):
 
         if item_text:
             ctk.CTkLabel(
-                card, text=item_text, justify="left",
+                card, text=item_text, justify="left", wraplength=160,
                 font=("Arial", 11),
                 text_color=self.controller.colors["text_main"]
             ).pack(pady=3, padx=6)
@@ -530,7 +563,7 @@ class CashierFrame(ctk.CTkFrame):
 
         if item_text:
             ctk.CTkLabel(
-                card, text=item_text, justify="left",
+                card, text=item_text, justify="left", wraplength=160,
                 font=("Arial", 11),
                 text_color=self.controller.colors["text_main"]
             ).pack(pady=3, padx=6)

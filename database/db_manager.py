@@ -81,13 +81,14 @@ class DatabaseManager:
             """)
             
             # Inject default Admin user for testing
-            cursor.execute("SELECT COUNT(*) FROM users")
-            if cursor.fetchone()[0] == 0:
-                cursor.execute(
-                    "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-                    ("admin", "admin123", "Admin") 
-                )
-
+            cursor.execute(
+                "INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                ("admin", "admin123", "Admin") 
+            )
+            cursor.execute(
+                "INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                ("staff", "staff123", "Staff") 
+            )
             conn.commit()
 
     def get_next_sequence(self):
