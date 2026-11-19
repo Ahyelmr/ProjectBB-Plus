@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import customtkinter as ctk
 from PIL import Image
 
@@ -29,13 +30,26 @@ class CashierFrame(ctk.CTkFrame):
         self._last_queue_snapshot = None
         self._resize_debounce_job = None
 
-        # Grid & Snap state
+        self._splitter_idle_color = c["border"]
+        self._splitter_hover_color = c["primary"]
+
+        # Grid & Resizable Panel Weights
         self._active_snap_mode = None
         self._menu_buttons = []
-        self._current_menu_cols = 3
-        self._menu_weight = 48  # Snaps to detents: 45, 52, 60
-        self._cart_weight = 26
-        self._queue_weight = 26
+        self._top_bar_compact = None
+
+        # 3-Column main weights (sum = 100)
+        self._menu_weight = 48
+        self._cart_weight = 25
+        self._queue_weight = 27
+
+        # 2-Column / Focus split weights (sum = 100)
+        self._split_left_weight = 60
+        self._split_right_weight = 40
+
+        # Inner Live Kitchen Queue column weights (sum = 100)
+        self._prep_weight = 50
+        self._ready_weight = 50
 
         # --- Left Workspace Container (Top Bar + Menu Grid) ---
         self.left_workspace = ctk.CTkFrame(self, fg_color="transparent")
@@ -49,19 +63,22 @@ class CashierFrame(ctk.CTkFrame):
         )
         self.top_bar.pack(fill="x", padx=2, pady=(0, 8))
 
-        self.logo_label = ctk.CTkLabel(self.top_bar, text="")
+        self.top_bar_filters = ctk.CTkFrame(self.top_bar, fg_color="transparent")
+        self.top_bar_filters.pack(side="left", fill="x", expand=True)
+
+        self.logo_label = ctk.CTkLabel(self.top_bar_filters, text="")
         self._update_logo(38, 38)
 
         self.sort_lbl = ctk.CTkLabel(
-            self.top_bar, text="Sort:", font=f["small"], text_color=c["text_main"]
+            self.top_bar_filters, text="Sort:", font=f["small"], text_color=c["text_main"]
         )
         self.sort_lbl.pack(side="left", padx=(6, 4), pady=8)
 
         self.sort_var = ctk.StringVar(value="Name (Asc)")
         self.sort_menu = ctk.CTkOptionMenu(
-            self.top_bar,
+            self.top_bar_filters,
             variable=self.sort_var,
-            width=120,
+            width=115,
             height=30,
             font=f["small"],
             fg_color=c["primary"],
@@ -74,15 +91,15 @@ class CashierFrame(ctk.CTkFrame):
         self.sort_menu.pack(side="left", padx=(0, 8), pady=8)
 
         self.cat_lbl = ctk.CTkLabel(
-            self.top_bar, text="Category:", font=f["small"], text_color=c["text_main"]
+            self.top_bar_filters, text="Category:", font=f["small"], text_color=c["text_main"]
         )
         self.cat_lbl.pack(side="left", padx=(0, 4), pady=8)
 
         self.category_var = ctk.StringVar(value="All Categories")
         self.category_menu = ctk.CTkOptionMenu(
-            self.top_bar,
+            self.top_bar_filters,
             variable=self.category_var,
-            width=135,
+            width=130,
             height=30,
             font=f["small"],
             fg_color=c["primary"],
@@ -94,7 +111,7 @@ class CashierFrame(ctk.CTkFrame):
         )
         self.category_menu.pack(side="left", padx=(0, 8), pady=8)
 
-        # Quick-Snap View Switcher on Right of Top Bar
+        # Quick-Snap View Switcher
         self.quick_snap = ctk.CTkSegmentedButton(
             self.top_bar,
             values=["Auto", "3-Col", "Split", "Focus"],
@@ -120,16 +137,12 @@ class CashierFrame(ctk.CTkFrame):
         )
         self.menu_frame.pack(fill="both", expand=True)
 
-        # --- Draggable Snap-to-Detent Splitter ---
-        self.splitter = ctk.CTkFrame(
+        # --- Splitter 1: Between Menu Workspace and Current Order ---
+        self.splitter_menu_cart = self._create_splitter(
             self,
-            width=6,
-            fg_color=c["border"],
-            corner_radius=3,
-            cursor="sb_h_double_arrow",
+            on_drag=self._on_menu_cart_drag,
+            on_release=self._on_main_splitter_release,
         )
-        self.splitter.bind("<B1-Motion>", self._on_splitter_drag)
-        self.splitter.bind("<ButtonRelease-1>", self._on_splitter_release)
 
         # --- Center: Cart & Checkout Sidebar ---
         self.sidebar_frame = ctk.CTkFrame(
@@ -253,6 +266,13 @@ class CashierFrame(ctk.CTkFrame):
             command=lambda: controller.show_frame("LoginFrame"),
         )
 
+        # --- Splitter 2: Right Side of Current Order (Between Cart & Live Kitchen Queue) ---
+        self.splitter_cart_queue = self._create_splitter(
+            self,
+            on_drag=self._on_cart_queue_drag,
+            on_release=self._on_main_splitter_release,
+        )
+
         # --- Right / Docked: Live Kitchen Queue ---
         self.kitchen_container = ctk.CTkFrame(
             self,
@@ -263,7 +283,9 @@ class CashierFrame(ctk.CTkFrame):
         )
         self.kitchen_container.grid_rowconfigure(0, weight=0)
         self.kitchen_container.grid_rowconfigure(1, weight=1)
-        self.kitchen_container.grid_columnconfigure((0, 1), weight=1, uniform="kitchen_cols")
+        self.kitchen_container.grid_columnconfigure(0, weight=self._prep_weight, minsize=120)
+        self.kitchen_container.grid_columnconfigure(1, weight=0, minsize=8)
+        self.kitchen_container.grid_columnconfigure(2, weight=self._ready_weight, minsize=120)
 
         self.queue_header = ctk.CTkLabel(
             self.kitchen_container,
@@ -271,7 +293,7 @@ class CashierFrame(ctk.CTkFrame):
             font=f["header"],
             text_color=c["text_main"],
         )
-        self.queue_header.grid(row=0, column=0, columnspan=2, pady=(10, 4))
+        self.queue_header.grid(row=0, column=0, columnspan=3, pady=(10, 4))
 
         self.prep_column = ctk.CTkScrollableFrame(
             self.kitchen_container,
@@ -286,7 +308,15 @@ class CashierFrame(ctk.CTkFrame):
             scrollbar_button_color=c["border"],
             scrollbar_button_hover_color=c["text_muted"],
         )
-        self.prep_column.grid(row=1, column=0, sticky="nsew", padx=(8, 4), pady=(0, 8))
+        self.prep_column.grid(row=1, column=0, sticky="nsew", padx=(8, 2), pady=(0, 8))
+
+        # --- Splitter 3: Inside Live Kitchen Queue (Between Preparing & Ready for Pickup) ---
+        self.splitter_kitchen = self._create_splitter(
+            self.kitchen_container,
+            on_drag=self._on_kitchen_splitter_drag,
+            on_release=None,
+        )
+        self.splitter_kitchen.grid(row=1, column=1, sticky="ns", pady=(4, 12))
 
         self.ready_column = ctk.CTkScrollableFrame(
             self.kitchen_container,
@@ -301,7 +331,7 @@ class CashierFrame(ctk.CTkFrame):
             scrollbar_button_color=c["border"],
             scrollbar_button_hover_color=c["text_muted"],
         )
-        self.ready_column.grid(row=1, column=1, sticky="nsew", padx=(4, 8), pady=(0, 8))
+        self.ready_column.grid(row=1, column=2, sticky="nsew", padx=(2, 8), pady=(0, 8))
 
         self.bind("<Configure>", self._on_configure)
         self.update_admin_features()
@@ -309,8 +339,24 @@ class CashierFrame(ctk.CTkFrame):
         self.load_menu()
         self.refresh_kitchen_queue()
 
+    def _create_splitter(self, parent, on_drag, on_release=None):
+        """Creates a styled, hover-highlighted vertical splitter handle."""
+        bar = ctk.CTkFrame(
+            parent,
+            width=6,
+            fg_color=self._splitter_idle_color,
+            corner_radius=3,
+            cursor="sb_h_double_arrow",
+        )
+        bar.bind("<Enter>", lambda _e, b=bar: b.configure(fg_color=self._splitter_hover_color))
+        bar.bind("<Leave>", lambda _e, b=bar: b.configure(fg_color=self._splitter_idle_color))
+        bar.bind("<B1-Motion>", on_drag)
+        if on_release:
+            bar.bind("<ButtonRelease-1>", on_release)
+        return bar
+
     # =========================================================================
-    # GRID & SNAP LAYOUT ENGINE
+    # GRID & MULTI-SPLITTER LAYOUT ENGINE
     # =========================================================================
     def _on_quick_snap_select(self, choice):
         mapping = {
@@ -323,33 +369,67 @@ class CashierFrame(ctk.CTkFrame):
         self._active_snap_mode = None
         self._apply_responsive_layout(self.winfo_width() or 1280)
 
-    def _on_splitter_drag(self, event):
-        if self._active_snap_mode != "3-Column Wide":
-            return
+    def _on_menu_cart_drag(self, _event):
+        """Slides the boundary between the Menu workspace and Current Order panel."""
         total_w = max(1, self.winfo_width())
         pointer_x = self.winfo_pointerx() - self.winfo_rootx()
-        ratio = max(0.38, min(0.64, pointer_x / total_w))
-        self._menu_weight = int(ratio * 100)
-        rem = 100 - self._menu_weight
-        self._cart_weight = rem // 2
-        self._queue_weight = rem - self._cart_weight
-        self.grid_columnconfigure(0, weight=self._menu_weight, minsize=340)
-        self.grid_columnconfigure(2, weight=self._cart_weight, minsize=270)
-        self.grid_columnconfigure(3, weight=self._queue_weight, minsize=340)
 
-    def _on_splitter_release(self, _event):
-        """Snaps the dragged column divider cleanly onto nearest preset detent."""
+        if self._active_snap_mode == "3-Column Wide":
+            avail = 100 - self._queue_weight
+            desired_menu = int(round((pointer_x / total_w) * 100))
+            min_menu = 26
+            max_menu = max(min_menu, avail - 20)
+            self._menu_weight = max(min_menu, min(max_menu, desired_menu))
+            self._cart_weight = avail - self._menu_weight
+
+            self.grid_columnconfigure(0, weight=self._menu_weight, minsize=280)
+            self.grid_columnconfigure(2, weight=self._cart_weight, minsize=240)
+            self.grid_columnconfigure(4, weight=self._queue_weight, minsize=280)
+        else:
+            desired_left = int(round((pointer_x / total_w) * 100))
+            self._split_left_weight = max(32, min(74, desired_left))
+            self._split_right_weight = 100 - self._split_left_weight
+
+            self.grid_columnconfigure(0, weight=self._split_left_weight, minsize=300)
+            self.grid_columnconfigure(2, weight=self._split_right_weight, minsize=250)
+
+        self._update_top_bar_layout()
+
+    def _on_cart_queue_drag(self, _event):
+        """Slides the boundary between Current Order and Live Kitchen Queue."""
         if self._active_snap_mode != "3-Column Wide":
             return
-        detents = [44, 50, 58]
-        snapped = min(detents, key=lambda d: abs(d - self._menu_weight))
-        self._menu_weight = snapped
-        rem = 100 - snapped
-        self._cart_weight = rem // 2
-        self._queue_weight = rem - self._cart_weight
-        self.grid_columnconfigure(0, weight=self._menu_weight, minsize=340)
-        self.grid_columnconfigure(2, weight=self._cart_weight, minsize=270)
-        self.grid_columnconfigure(3, weight=self._queue_weight, minsize=340)
+
+        total_w = max(1, self.winfo_width())
+        pointer_x = self.winfo_pointerx() - self.winfo_rootx()
+
+        avail = 100 - self._menu_weight
+        boundary_pct = int(round((pointer_x / total_w) * 100))
+        desired_cart = boundary_pct - self._menu_weight
+
+        min_cart = 20
+        max_cart = max(min_cart, avail - 22)
+        self._cart_weight = max(min_cart, min(max_cart, desired_cart))
+        self._queue_weight = avail - self._cart_weight
+
+        self.grid_columnconfigure(0, weight=self._menu_weight, minsize=280)
+        self.grid_columnconfigure(2, weight=self._cart_weight, minsize=240)
+        self.grid_columnconfigure(4, weight=self._queue_weight, minsize=280)
+
+    def _on_kitchen_splitter_drag(self, _event):
+        """Slides the divider between Preparing and Ready for Pickup inside Live Kitchen Queue."""
+        container_w = max(1, self.kitchen_container.winfo_width())
+        rel_x = self.winfo_pointerx() - self.kitchen_container.winfo_rootx()
+
+        ratio = max(0.25, min(0.75, rel_x / container_w))
+        self._prep_weight = int(round(ratio * 100))
+        self._ready_weight = 100 - self._prep_weight
+
+        self.kitchen_container.grid_columnconfigure(0, weight=self._prep_weight, minsize=120)
+        self.kitchen_container.grid_columnconfigure(2, weight=self._ready_weight, minsize=120)
+
+    def _on_main_splitter_release(self, _event):
+        """Reflows menu columns and top bar controls after dragging completes."""
         self._reflow_menu_grid()
 
     def _on_configure(self, event):
@@ -364,7 +444,7 @@ class CashierFrame(ctk.CTkFrame):
         self._resize_debounce_job = self.after(60, lambda w=event.width: self._apply_responsive_layout(w))
 
     def _apply_responsive_layout(self, width):
-        """Snaps Cashier panels into 3-Column, 2-Column Split, or Focus grid based on width/setting."""
+        """Snaps Cashier panels into 3-Column, 2-Column Split, or Focus grid with draggable dividers."""
         if width <= 1:
             width = 1280
 
@@ -382,53 +462,79 @@ class CashierFrame(ctk.CTkFrame):
         if target_mode != self._active_snap_mode:
             self._active_snap_mode = target_mode
 
-            # Clear previous grid assignments without destroying widgets
             self.left_workspace.grid_forget()
-            self.splitter.grid_forget()
+            self.splitter_menu_cart.grid_forget()
             self.sidebar_frame.grid_forget()
+            self.splitter_cart_queue.grid_forget()
             self.kitchen_container.grid_forget()
 
-            # Reset weights
             for r in range(3):
                 self.grid_rowconfigure(r, weight=0, minsize=0)
-            for c_idx in range(4):
+            for c_idx in range(5):
                 self.grid_columnconfigure(c_idx, weight=0, minsize=0)
 
             if target_mode == "3-Column Wide":
                 self.grid_rowconfigure(0, weight=1)
-                self.grid_columnconfigure(0, weight=self._menu_weight, minsize=340)
+                self.grid_columnconfigure(0, weight=self._menu_weight, minsize=280)
                 self.grid_columnconfigure(1, weight=0, minsize=8)
-                self.grid_columnconfigure(2, weight=self._cart_weight, minsize=270)
-                self.grid_columnconfigure(3, weight=self._queue_weight, minsize=340)
+                self.grid_columnconfigure(2, weight=self._cart_weight, minsize=240)
+                self.grid_columnconfigure(3, weight=0, minsize=8)
+                self.grid_columnconfigure(4, weight=self._queue_weight, minsize=280)
 
                 self.left_workspace.grid(row=0, column=0, sticky="nsew", padx=(10, 2), pady=10)
-                self.splitter.grid(row=0, column=1, sticky="ns", pady=18)
-                self.sidebar_frame.grid(row=0, column=2, sticky="nsew", padx=4, pady=10)
-                self.kitchen_container.grid(row=0, column=3, sticky="nsew", padx=(4, 10), pady=10)
+                self.splitter_menu_cart.grid(row=0, column=1, sticky="ns", pady=18)
+                self.sidebar_frame.grid(row=0, column=2, sticky="nsew", padx=2, pady=10)
+                self.splitter_cart_queue.grid(row=0, column=3, sticky="ns", pady=18)
+                self.kitchen_container.grid(row=0, column=4, sticky="nsew", padx=(2, 10), pady=10)
 
             elif target_mode == "2-Column Split":
-                # Top Row: Menu Grid (left) + Cart (right) | Bottom Row: Live Kitchen Queue docked full width
                 self.grid_rowconfigure(0, weight=3)
                 self.grid_rowconfigure(1, weight=2, minsize=210)
-                self.grid_columnconfigure(0, weight=3, minsize=360)
-                self.grid_columnconfigure(1, weight=2, minsize=280)
+                self.grid_columnconfigure(0, weight=self._split_left_weight, minsize=320)
+                self.grid_columnconfigure(1, weight=0, minsize=8)
+                self.grid_columnconfigure(2, weight=self._split_right_weight, minsize=260)
 
-                self.left_workspace.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=(10, 5))
-                self.sidebar_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 10), pady=(10, 5))
-                self.kitchen_container.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=10, pady=(5, 10))
+                self.left_workspace.grid(row=0, column=0, sticky="nsew", padx=(10, 2), pady=(10, 5))
+                self.splitter_menu_cart.grid(row=0, column=1, sticky="ns", pady=(18, 10))
+                self.sidebar_frame.grid(row=0, column=2, sticky="nsew", padx=(2, 10), pady=(10, 5))
+                self.kitchen_container.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=10, pady=(5, 10))
 
-            else:  # Focus Menu (Menu + Cart side-by-side; Queue hidden to prevent cramping)
+            else:  # Focus Menu
                 self.grid_rowconfigure(0, weight=1)
-                self.grid_columnconfigure(0, weight=3, minsize=320)
-                self.grid_columnconfigure(1, weight=2, minsize=260)
+                self.grid_columnconfigure(0, weight=self._split_left_weight, minsize=300)
+                self.grid_columnconfigure(1, weight=0, minsize=8)
+                self.grid_columnconfigure(2, weight=self._split_right_weight, minsize=250)
 
-                self.left_workspace.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=10)
-                self.sidebar_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 10), pady=10)
+                self.left_workspace.grid(row=0, column=0, sticky="nsew", padx=(10, 2), pady=10)
+                self.splitter_menu_cart.grid(row=0, column=1, sticky="ns", pady=18)
+                self.sidebar_frame.grid(row=0, column=2, sticky="nsew", padx=(2, 10), pady=10)
 
         self.after_idle(self._reflow_menu_grid)
 
+    def _update_top_bar_layout(self):
+        """Prevents top_bar controls from clipping when the menu panel is slid narrow."""
+        panel_w = self.left_workspace.winfo_width()
+        if panel_w <= 1:
+            panel_w = 560
+
+        compact = panel_w < 610
+        if compact == self._top_bar_compact:
+            return
+        self._top_bar_compact = compact
+
+        self.top_bar_filters.pack_forget()
+        self.quick_snap.pack_forget()
+
+        if compact:
+            self.top_bar_filters.pack(side="top", fill="x", padx=2, pady=(2, 0))
+            self.quick_snap.pack(side="top", anchor="w", padx=8, pady=(0, 8))
+        else:
+            self.top_bar_filters.pack(side="left", fill="x", expand=True)
+            self.quick_snap.pack(side="right", padx=8, pady=8)
+
     def _reflow_menu_grid(self):
         """Snaps menu cards into 2, 3, or 4 columns to fit panel width and active font size."""
+        self._update_top_bar_layout()
         if not self._menu_buttons:
             return
 
@@ -442,7 +548,7 @@ class CashierFrame(ctk.CTkFrame):
         else:
             if panel_w >= 720:
                 cols = 4
-            elif panel_w >= 470:
+            elif panel_w >= 460:
                 cols = 3
             else:
                 cols = 2
@@ -454,7 +560,11 @@ class CashierFrame(ctk.CTkFrame):
         wrap_len = max(95, card_width - 20)
 
         for idx in range(4):
-            self.menu_frame.grid_columnconfigure(idx, weight=1 if idx < cols else 0, uniform="menu_cols" if idx < cols else "")
+            self.menu_frame.grid_columnconfigure(
+                idx,
+                weight=1 if idx < cols else 0,
+                uniform="menu_cols" if idx < cols else "",
+            )
 
         for idx, btn in enumerate(self._menu_buttons):
             r, c_idx = divmod(idx, cols)
@@ -470,12 +580,17 @@ class CashierFrame(ctk.CTkFrame):
     # =========================================================================
     def apply_theme(self):
         c = self.controller.colors
+        self._splitter_idle_color = c["border"]
+        self._splitter_hover_color = c["primary"]
+
         self.configure(fg_color=c["bg_main"])
         self.top_bar.configure(fg_color=c["bg_card"], border_color=c["border"])
         self.sidebar_frame.configure(fg_color=c["bg_card"], border_color=c["border"])
         self.kitchen_container.configure(fg_color=c["bg_card"], border_color=c["border"])
         self.cart_list_frame.configure(fg_color=c["bg_input"])
-        self.splitter.configure(fg_color=c["border"])
+
+        for bar in (self.splitter_menu_cart, self.splitter_cart_queue, self.splitter_kitchen):
+            bar.configure(fg_color=c["border"])
 
         for lbl in (self.sort_lbl, self.cat_lbl, self.order_header, self.queue_header):
             lbl.configure(text_color=c["text_main"])
@@ -548,7 +663,7 @@ class CashierFrame(ctk.CTkFrame):
                 ctk_img = ctk.CTkImage(light_image=resized, dark_image=resized, size=new_size)
                 self.logo_label.configure(image=ctk_img)
                 if not self.logo_label.winfo_ismapped():
-                    children = self.top_bar.winfo_children()
+                    children = self.top_bar_filters.winfo_children()
                     first_other = next((w for w in children if w is not self.logo_label), None)
                     if first_other:
                         self.logo_label.pack(side="left", before=first_other, padx=(6, 4))
@@ -785,6 +900,26 @@ class CashierFrame(ctk.CTkFrame):
         self.update_cart_display()
         self.refresh_kitchen_queue(force=True)
 
+    def announce_order(self, seq_num):
+        """Triggers voice paging (TTS) for a given order sequence number."""
+        if hasattr(self.controller, "queue") and self.controller.queue:
+            if hasattr(self.controller.queue, "announce_order"):
+                self.controller.queue.announce_order(seq_num)
+            elif hasattr(self.controller.queue, "_play_announcement"):
+                self.controller.queue._play_announcement(seq_num)
+            return
+
+        def _speak():
+            try:
+                import pyttsx3
+                engine = pyttsx3.init()
+                engine.say(f"Order number {seq_num}, please proceed to the counter.")
+                engine.runAndWait()
+            except Exception as e:
+                print(f"TTS announcement error: {e}")
+
+        threading.Thread(target=_speak, daemon=True).start()
+
     def refresh_kitchen_queue(self, force=False):
         if self._queue_refresh_job is not None:
             self.after_cancel(self._queue_refresh_job)
@@ -793,143 +928,176 @@ class CashierFrame(ctk.CTkFrame):
         with self.controller.db._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT order_id, sequence_number, status
+                SELECT
+                    orders.order_id,
+                    orders.sequence_number,
+                    orders.status,
+                    order_items.quantity,
+                    inventory.name AS item_name
                 FROM orders
-                WHERE status IN ('PREPARING', 'PENDING', 'READY')
-                ORDER BY sequence_number ASC
+                JOIN order_items ON orders.order_id = order_items.order_id
+                JOIN inventory ON order_items.sku = inventory.sku
+                WHERE orders.status IN ('PREPARING', 'READY')
+                ORDER BY orders.sequence_number ASC, orders.order_id ASC, order_items.item_id ASC
             """)
-            orders = cursor.fetchall()
-            snapshot = [(o["order_id"], o["sequence_number"], o["status"]) for o in orders]
+            rows = cursor.fetchall()
 
-            if force or snapshot != self._last_queue_snapshot:
-                self._last_queue_snapshot = snapshot
+        orders_map = {}
+        for row in rows:
+            oid = row["order_id"]
+            if oid not in orders_map:
+                orders_map[oid] = {
+                    "order_id": oid,
+                    "sequence_number": row["sequence_number"],
+                    "status": row["status"],
+                    "items": [],
+                }
+            orders_map[oid]["items"].append((row["quantity"], row["item_name"]))
 
-                for widget in self.prep_column.winfo_children():
-                    widget.destroy()
-                for widget in self.ready_column.winfo_children():
-                    widget.destroy()
+        snapshot = tuple(
+            (o["order_id"], o["status"], tuple(o["items"]))
+            for o in orders_map.values()
+        )
 
-                for order in orders:
-                    order_id = order["order_id"]
-                    seq_num = order["sequence_number"]
-                    status = order["status"]
+        if force or snapshot != self._last_queue_snapshot:
+            self._last_queue_snapshot = snapshot
+            self._render_kitchen_columns(list(orders_map.values()))
 
-                    cursor.execute("""
-                        SELECT inventory.name, order_items.quantity
-                        FROM order_items
-                        JOIN inventory ON order_items.sku = inventory.sku
-                        WHERE order_items.order_id = ?
-                    """, (order_id,))
-                    items = cursor.fetchall()
-                    item_text = "\n".join([f"{row['quantity']}x {row['name']}" for row in items])
+        self._queue_refresh_job = self.after(5000, self.refresh_kitchen_queue)
 
-                    if status in ("PREPARING", "PENDING"):
-                        self._create_prep_card(order_id, seq_num, item_text)
-                    elif status == "READY":
-                        self._create_ready_card(order_id, seq_num, item_text)
-
-        interval_sec = int(self.controller.settings.get("queue_refresh_sec", 5))
-        if interval_sec > 0:
-            self._queue_refresh_job = self.after(interval_sec * 1000, self.refresh_kitchen_queue)
-
-    def _create_prep_card(self, order_id, seq_num, item_text):
+    def _render_kitchen_columns(self, orders):
         c = self.controller.colors
         f = self.controller.fonts
-        wrap = self.controller.font_metrics.get("queue_wrap", 165)
+
+        for widget in self.prep_column.winfo_children():
+            widget.destroy()
+        for widget in self.ready_column.winfo_children():
+            widget.destroy()
+
+        prep_orders = [o for o in orders if o["status"] == "PREPARING"]
+        ready_orders = [o for o in orders if o["status"] == "READY"]
+
+        if not prep_orders:
+            ctk.CTkLabel(
+                self.prep_column,
+                text="No orders preparing",
+                font=f["small"],
+                text_color=c["text_muted"],
+            ).pack(pady=16)
+        else:
+            for order in prep_orders:
+                self._create_prep_card(order["order_id"], order["sequence_number"], order["items"])
+
+        if not ready_orders:
+            ctk.CTkLabel(
+                self.ready_column,
+                text="No orders ready",
+                font=f["small"],
+                text_color=c["text_muted"],
+            ).pack(pady=16)
+        else:
+            for order in ready_orders:
+                self._create_ready_card(order["order_id"], order["sequence_number"], order["items"])
+
+    def _create_prep_card(self, order_id, seq_num, items):
+        c = self.controller.colors
+        f = self.controller.fonts
 
         card = ctk.CTkFrame(
-            self.prep_column, border_width=1, corner_radius=8, fg_color=c["bg_card"], border_color=c["accent_gold"]
+            self.prep_column,
+            fg_color=c["bg_card"],
+            border_width=1,
+            border_color=c["accent_gold"],
+            corner_radius=8,
         )
-        card.pack(fill="x", padx=4, pady=5)
+        card.pack(fill="x", padx=4, pady=4)
 
-        ctk.CTkLabel(card, text=f"Order #{seq_num}", font=f["subheader"], text_color=c["accent_gold"]).pack(pady=(6, 2))
-        if item_text:
-            ctk.CTkLabel(
-                card, text=item_text, justify="left", wraplength=wrap, font=f["small"], text_color=c["text_main"]
-            ).pack(pady=3, padx=8, anchor="w")
+        ctk.CTkLabel(
+            card,
+            text=f"Order #{seq_num}",
+            font=f["subheader"],
+            text_color=c["accent_gold"],
+        ).pack(anchor="w", padx=8, pady=(6, 2))
+
+        items_text = "\n".join(f"• {qty}x {name}" for qty, name in items)
+        ctk.CTkLabel(
+            card,
+            text=items_text,
+            font=f["small"],
+            text_color=c["text_main"],
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", padx=8, pady=(0, 6))
 
         ctk.CTkButton(
             card,
             text="Move to Ready",
             height=28,
             font=f["small"],
-            fg_color=c["primary"],
-            hover_color=c["primary_hover"],
-            text_color="#FFFFFF",
-            command=lambda o=order_id, s=seq_num: self.move_to_ready(o, s),
-        ).pack(pady=(6, 8), padx=8, fill="x")
+            fg_color=c["accent_gold"],
+            hover_color=c["gold_hover"],
+            text_color=c["text_on_gold"],
+            command=lambda oid=order_id, seq=seq_num: [
+                self.controller.queue.mark_order_ready(oid, seq),
+                self.refresh_kitchen_queue(force=True),
+            ],
+        ).pack(fill="x", padx=8, pady=(0, 8))
 
-    def _create_ready_card(self, order_id, seq_num, item_text):
+    def _create_ready_card(self, order_id, seq_num, items):
         c = self.controller.colors
         f = self.controller.fonts
-        wrap = self.controller.font_metrics.get("queue_wrap", 165)
 
         card = ctk.CTkFrame(
-            self.ready_column, border_width=1, corner_radius=8, fg_color=c["bg_card"], border_color=c["text_green"]
+            self.ready_column,
+            fg_color=c["bg_card"],
+            border_width=1,
+            border_color=c["text_green"],
+            corner_radius=8,
         )
-        card.pack(fill="x", padx=4, pady=5)
+        card.pack(fill="x", padx=4, pady=4)
 
-        ctk.CTkLabel(card, text=f"Order #{seq_num}", font=f["subheader"], text_color=c["text_green"]).pack(pady=(6, 2))
-        if item_text:
-            ctk.CTkLabel(
-                card, text=item_text, justify="left", wraplength=wrap, font=f["small"], text_color=c["text_main"]
-            ).pack(pady=3, padx=8, anchor="w")
+        ctk.CTkLabel(
+            card,
+            text=f"Order #{seq_num}",
+            font=f["subheader"],
+            text_color=c["text_green"],
+        ).pack(anchor="w", padx=8, pady=(6, 2))
 
-        btn_frame = ctk.CTkFrame(card, fg_color="transparent")
-        btn_frame.pack(pady=(6, 8), padx=6, fill="x")
-        btn_frame.grid_columnconfigure((0, 1), weight=1)
+        items_text = "\n".join(f"• {qty}x {name}" for qty, name in items)
+        ctk.CTkLabel(
+            card,
+            text=items_text,
+            font=f["small"],
+            text_color=c["text_main"],
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", padx=8, pady=(0, 6))
+
+        btn_row = ctk.CTkFrame(card, fg_color="transparent")
+        btn_row.pack(fill="x", padx=8, pady=(0, 8))
+        btn_row.grid_columnconfigure((0, 1), weight=1)
 
         ctk.CTkButton(
-            btn_frame,
+            btn_row,
             text="Call",
             height=28,
             font=f["small"],
             fg_color=c["primary"],
             hover_color=c["primary_hover"],
             text_color="#FFFFFF",
-            command=lambda s=seq_num: self.announce_order(s),
-        ).grid(row=0, column=0, padx=2, sticky="ew")
+            command=lambda seq=seq_num: self.announce_order(seq),
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
 
         ctk.CTkButton(
-            btn_frame,
+            btn_row,
             text="Done",
             height=28,
             font=f["small"],
             fg_color=c["accent_green"],
             hover_color=c["green_hover"],
             text_color="#FFFFFF",
-            command=lambda o=order_id: self.complete_order(o),
-        ).grid(row=0, column=1, padx=2, sticky="ew")
-
-    def move_to_ready(self, order_id, seq_num):
-        if hasattr(self.controller, "queue") and self.controller.queue:
-            self.controller.queue.mark_order_ready(order_id, seq_num)
-        else:
-            with self.controller.db._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE orders SET status = 'READY' WHERE order_id = ?", (order_id,))
-                conn.commit()
-            self.announce_order(seq_num)
-        self.refresh_kitchen_queue(force=True)
-
-    def complete_order(self, order_id):
-        if hasattr(self.controller, "queue") and self.controller.queue:
-            self.controller.queue.complete_order(order_id)
-        else:
-            with self.controller.db._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE orders SET status = 'COMPLETED' WHERE order_id = ?", (order_id,))
-                conn.commit()
-        self.refresh_kitchen_queue(force=True)
-
-    def announce_order(self, sequence_number):
-        if hasattr(self.controller, "queue") and self.controller.queue:
-            self.controller.queue._play_announcement(sequence_number)
-        else:
-            import pyttsx3
-            try:
-                engine = pyttsx3.init()
-                engine.say(f"Order number {sequence_number} is ready for pickup.")
-                engine.runAndWait()
-            except Exception as e:
-                print(f"TTS Error: {e}")
+            command=lambda oid=order_id: [
+                self.controller.queue.complete_order(oid),
+                self.refresh_kitchen_queue(force=True),
+            ],
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0))

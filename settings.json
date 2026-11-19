@@ -2,7 +2,7 @@
   "font_size": "Large",
   "ui_scaling": 1.15,
   "theme_name": "Dark Slate",
-  "cashier_layout": "Auto-Snap",
+  "cashier_layout": "3-Column Wide",
   "menu_columns": "Auto",
   "show_menu_icons": true,
   "queue_refresh_sec": 5
