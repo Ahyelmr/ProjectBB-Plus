@@ -41,7 +41,6 @@ class LoginFrame(ctk.CTkFrame):
 
         # Logo Label (prominent centerpiece branding)
         self.logo_label = ctk.CTkLabel(self.login_card, text="")
-        self._update_logo(135, 135)
 
         self.title_label = ctk.CTkLabel(
             self.login_card,
@@ -50,6 +49,8 @@ class LoginFrame(ctk.CTkFrame):
             text_color=c["text_main"]
         )
         self.title_label.pack(pady=(5, 2))
+
+        self._update_logo(135, 135)
 
         self.subtitle_label = ctk.CTkLabel(
             self.login_card,

@@ -49,17 +49,29 @@ class QueueManager:
                 # 1. Initialize COM library for the background thread
                 pythoncom.CoInitialize()
                 
-                # 2. Native Windows SAPI5 dispatch (Fast, reliable, no loop locks)
+                # 2. Native Windows SAPI5 dispatch
                 try:
                     speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                    speaker.Speak(f"Order number {seq_num} is ready for pickup.")
+                    voices = speaker.GetVoices()
+                    
+                    # Select Microsoft Zira (index 1) if available
+                    if voices.Count > 1:
+                        speaker.Voice = voices.Item(1)
+                    
+                    speaker.Volume = 100  # Max volume (0-100) for ambient noise
+                    speaker.Rate = -1     # Slightly slower (-10 to 10) for clarity
+                    
+                    speaker.Speak(f"Big Boys Order number {seq_num} is ready for pickup.")
                 except Exception:
                     # Fallback using pyttsx3 inside the COM context
                     import pyttsx3
                     engine = pyttsx3.init()
+                    voices = engine.getProperty('voices')
+                    if len(voices) > 1:
+                        engine.setProperty('voice', voices[1].id)
                     engine.setProperty('volume', 1.0)
                     engine.setProperty('rate', 150)
-                    engine.say(f"Order number {seq_num} is ready for pickup.")
+                    engine.say(f"Big Boys Order number {seq_num} is ready for pickup.")
                     engine.runAndWait()
             except Exception as e:
                 print(f"Audio Paging Error: {e}")

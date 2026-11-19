@@ -59,7 +59,7 @@ class KitchenFrame(ctk.CTkFrame):
         self.header_center.pack(side="left", expand=True)
 
         self.logo_label = ctk.CTkLabel(self.header_center, text="")
-        self._update_logo(44, 44)
+        
 
         self.title_label = ctk.CTkLabel(
             self.header_center,
@@ -68,6 +68,8 @@ class KitchenFrame(ctk.CTkFrame):
             text_color=c["text_main"]
         )
         self.title_label.pack(side="left", padx=6)
+
+        self._update_logo(44, 44)
 
         self.refresh_btn = ctk.CTkButton(
             self.top_bar,
