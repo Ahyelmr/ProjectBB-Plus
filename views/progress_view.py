@@ -20,7 +20,12 @@ def get_resource_path(relative_path):
 
 class ProgressFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
-        super().__init__(parent, fg_color=controller.colors["bg_main"])
+        c = controller.colors
+        f = controller.fonts
+        gold_bg = c.get("accent_gold", c.get("brand_gold", "#FACC15"))
+        gold_hv = c.get("gold_hover", c.get("brand_gold_hover", "#EAB308"))
+
+        super().__init__(parent, fg_color=c["bg_main"])
         self.controller = controller
         self._last_logo_size = None
         self.current_view = "Total Items Ordered Today"
@@ -32,21 +37,29 @@ class ProgressFrame(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         # --- Row 0: Top Navigation Bar ---
-        self.top_bar = ctk.CTkFrame(self, fg_color="transparent")
-        self.top_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
+        self.top_bar = ctk.CTkFrame(
+            self,
+            fg_color=c["bg_card"],
+            corner_radius=12,
+            border_width=1,
+            border_color=c["border"]
+        )
+        self.top_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
 
         ctk.CTkButton(
             self.top_bar,
             text="Back to Cashier",
-            width=130,
-            font=self.controller.fonts["button"],
-            fg_color=self.controller.colors["primary"],
-            hover_color=self.controller.colors["primary_hover"],
+            width=145,
+            height=36,
+            font=f["button"],
+            fg_color=c["primary"],
+            hover_color=c["primary_hover"],
+            text_color="#FFFFFF",
             command=lambda: [
                 self.controller.frames["CashierFrame"].load_menu(),
                 controller.show_frame("CashierFrame")
             ]
-        ).pack(side="left", padx=10, pady=8)
+        ).pack(side="left", padx=12, pady=10)
 
         # Centered Header Container (Logo + Title)
         self.header_center = ctk.CTkFrame(self.top_bar, fg_color="transparent")
@@ -58,31 +71,38 @@ class ProgressFrame(ctk.CTkFrame):
         self.title_label = ctk.CTkLabel(
             self.header_center,
             text="Daily Progress & Order Logs",
-            font=self.controller.fonts["title"],
-            text_color=self.controller.colors["text_main"]
+            font=f["header"],
+            text_color=c["text_main"]
         )
         self.title_label.pack(side="left", padx=6)
 
         ctk.CTkButton(
             self.top_bar,
             text="Refresh Data",
-            width=130,
-            font=self.controller.fonts["button"],
-            fg_color=self.controller.colors["primary"],
-            hover_color=self.controller.colors["primary_hover"],
+            width=135,
+            height=36,
+            font=f["button"],
+            fg_color=gold_bg,
+            hover_color=gold_hv,
+            text_color=c.get("text_on_gold", "#0F172A"),
             command=self.load_daily_data
-        ).pack(side="right", padx=10, pady=8)
+        ).pack(side="right", padx=12, pady=10)
 
         # --- Row 1: View Mode Switcher ---
         self.switch_bar = ctk.CTkFrame(self, fg_color="transparent")
-        self.switch_bar.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 6))
+        self.switch_bar.grid(row=1, column=0, sticky="ew", padx=10, pady=(2, 6))
 
         self.view_mode_selector = ctk.CTkSegmentedButton(
             self.switch_bar,
             values=["Total Items Ordered Today", "Orders in Sequence"],
-            font=self.controller.fonts["button"],
-            selected_color=self.controller.colors["primary"],
-            selected_hover_color=self.controller.colors["primary_hover"],
+            font=f["button"],
+            fg_color=c["bg_card"],
+            selected_color=c["primary"],
+            selected_hover_color=c["primary_hover"],
+            unselected_color=c["bg_card"],
+            unselected_hover_color=c["border"],
+            text_color="#FFFFFF",
+            height=36,
             command=self.switch_view
         )
         self.view_mode_selector.set(self.current_view)
@@ -91,43 +111,59 @@ class ProgressFrame(ctk.CTkFrame):
         # --- Row 2: Data Display Area ---
         self.data_frame = ctk.CTkScrollableFrame(
             self,
-            label_text="Items Ordered Today",
-            label_font=self.controller.fonts["header"],
-            label_text_color=self.controller.colors["text_main"],
-            fg_color=self.controller.colors["bg_card"]
+            label_text="Items Ordered Today (Completed)",
+            label_font=f["header"],
+            label_fg_color=c["border"],
+            label_text_color=gold_bg,
+            fg_color=c["bg_card"],
+            corner_radius=12,
+            border_width=1,
+            border_color=c["border"],
+            scrollbar_button_color=c["border"],
+            scrollbar_button_hover_color=c["text_muted"]
         )
         self.data_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=6)
         self.data_frame.grid_columnconfigure(0, weight=1)
 
         # --- Row 3: Bottom Export & Import Bar ---
-        self.bottom_bar = ctk.CTkFrame(self, fg_color="transparent")
+        self.bottom_bar = ctk.CTkFrame(
+            self,
+            fg_color=c["bg_card"],
+            corner_radius=12,
+            border_width=1,
+            border_color=c["border"]
+        )
         self.bottom_bar.grid(row=3, column=0, sticky="ew", padx=10, pady=(6, 10))
 
         self.total_items_label = ctk.CTkLabel(
             self.bottom_bar,
             text="Total Items Sold: 0",
-            font=self.controller.fonts["header"],
-            text_color=self.controller.colors["text_main"]
+            font=f["header"],
+            text_color=c.get("text_green", "#4ADE80")
         )
-        self.total_items_label.pack(side="left", padx=20, pady=8)
+        self.total_items_label.pack(side="left", padx=16, pady=10)
 
         ctk.CTkButton(
             self.bottom_bar,
             text="Export to CSV",
-            font=self.controller.fonts["button"],
-            fg_color=self.controller.colors["accent_green"],
-            hover_color=self.controller.colors["green_hover"],
+            height=36,
+            font=f["button"],
+            fg_color=c["accent_green"],
+            hover_color=c["green_hover"],
+            text_color="#FFFFFF",
             command=self.export_csv
-        ).pack(side="right", padx=10, pady=8)
+        ).pack(side="right", padx=(6, 12), pady=10)
 
         ctk.CTkButton(
             self.bottom_bar,
             text="Import Inventory CSV",
-            font=self.controller.fonts["button"],
-            fg_color=self.controller.colors["primary"],
-            hover_color=self.controller.colors["primary_hover"],
+            height=36,
+            font=f["button"],
+            fg_color=c["primary"],
+            hover_color=c["primary_hover"],
+            text_color="#FFFFFF",
             command=self.upload_csv
-        ).pack(side="right", padx=10, pady=8)
+        ).pack(side="right", padx=6, pady=10)
 
         self.daily_tally = []
         self.orders_sequence_data = []
@@ -186,6 +222,10 @@ class ProgressFrame(ctk.CTkFrame):
 
     def _load_item_tally(self, today):
         """Fetches and displays aggregated quantities of completed items ordered today."""
+        c = self.controller.colors
+        f = self.controller.fonts
+        green_text = c.get("text_green", "#4ADE80")
+
         with self.controller.db._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -204,9 +244,9 @@ class ProgressFrame(ctk.CTkFrame):
             ctk.CTkLabel(
                 self.data_frame,
                 text="No completed item orders recorded today.",
-                font=self.controller.fonts["body"],
-                text_color=self.controller.colors["text_muted"]
-            ).grid(row=0, column=0, pady=20, padx=10)
+                font=f["body"],
+                text_color=c["text_muted"]
+            ).grid(row=0, column=0, pady=24, padx=10)
             self.total_items_label.configure(text="Total Items Sold: 0")
             return
 
@@ -216,10 +256,10 @@ class ProgressFrame(ctk.CTkFrame):
 
             row_card = ctk.CTkFrame(
                 self.data_frame,
-                fg_color=self.controller.colors["bg_main"],
+                fg_color=c.get("bg_input", "#0B1120"),
                 corner_radius=8,
                 border_width=1,
-                border_color=self.controller.colors["border"]
+                border_color=c["border"]
             )
             row_card.grid(row=idx, column=0, sticky="ew", pady=4, padx=8)
             row_card.grid_columnconfigure(0, weight=1)
@@ -227,21 +267,26 @@ class ProgressFrame(ctk.CTkFrame):
             ctk.CTkLabel(
                 row_card,
                 text=item_name,
-                font=self.controller.fonts["body"],
-                text_color=self.controller.colors["text_main"]
-            ).grid(row=0, column=0, sticky="w", padx=14, pady=8)
+                font=f["body"],
+                text_color=c["text_main"]
+            ).grid(row=0, column=0, sticky="w", padx=14, pady=10)
 
             ctk.CTkLabel(
                 row_card,
                 text=f"Quantity Ordered Today: {qty_sold}",
-                font=self.controller.fonts["subheader"],
-                text_color=self.controller.colors["accent_green"]
-            ).grid(row=0, column=1, sticky="e", padx=14, pady=8)
+                font=f.get("subheader", f["body"]),
+                text_color=green_text
+            ).grid(row=0, column=1, sticky="e", padx=14, pady=10)
 
         self.total_items_label.configure(text=f"Total Items Sold: {total_items}")
 
     def _load_orders_in_sequence(self, today):
         """Fetches and displays all orders for today in sequence with their menu item breakdowns."""
+        c = self.controller.colors
+        f = self.controller.fonts
+        green_text = c.get("text_green", "#4ADE80")
+        gold_text = c.get("accent_gold", c.get("brand_gold", "#FACC15"))
+
         with self.controller.db._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -293,10 +338,10 @@ class ProgressFrame(ctk.CTkFrame):
             ctk.CTkLabel(
                 self.data_frame,
                 text="No orders recorded today.",
-                font=self.controller.fonts["body"],
-                text_color=self.controller.colors["text_muted"]
-            ).grid(row=0, column=0, pady=20, padx=10)
-            self.total_items_label.configure(text="Total Orders Today: 0 | Sales: ₱0.00")
+                font=f["body"],
+                text_color=c["text_muted"]
+            ).grid(row=0, column=0, pady=24, padx=10)
+            self.total_items_label.configure(text="Total Orders Today: 0  |  Sales: ₱0.00")
             return
 
         total_sales = 0.0
@@ -305,35 +350,35 @@ class ProgressFrame(ctk.CTkFrame):
             status = order["status"]
 
             if status == "COMPLETED":
-                status_color = self.controller.colors["accent_green"]
+                status_color = green_text
             elif status == "READY":
-                status_color = self.controller.colors["primary_hover"]
+                status_color = "#60A5FA"
             else:
-                status_color = self.controller.colors["accent_gold"]
+                status_color = gold_text
 
             # Extract time portion (HH:MM:SS) if full timestamp is stored
             time_str = order["order_date"].split(" ")[-1] if " " in order["order_date"] else order["order_date"]
 
             card = ctk.CTkFrame(
                 self.data_frame,
-                fg_color=self.controller.colors["bg_main"],
+                fg_color=c.get("bg_input", "#0B1120"),
                 corner_radius=10,
                 border_width=1,
-                border_color=self.controller.colors["border"]
+                border_color=c["border"]
             )
             card.grid(row=idx, column=0, sticky="ew", pady=6, padx=8)
             card.grid_columnconfigure(0, weight=1)
 
             # Card Header: Sequence #, Time, Status, and Order Total
             header_frame = ctk.CTkFrame(card, fg_color="transparent")
-            header_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(8, 4))
+            header_frame.grid(row=0, column=0, sticky="ew", padx=14, pady=(10, 4))
             header_frame.grid_columnconfigure(0, weight=1)
 
             left_header = f"Order #{order['sequence_number']}   •   {time_str}   •   [{status}]"
             ctk.CTkLabel(
                 header_frame,
                 text=left_header,
-                font=self.controller.fonts["subheader"],
+                font=f.get("subheader", f["body"]),
                 text_color=status_color
             ).grid(row=0, column=0, sticky="w")
 
@@ -341,32 +386,32 @@ class ProgressFrame(ctk.CTkFrame):
             ctk.CTkLabel(
                 header_frame,
                 text=f"Total: ₱{order['total_amount']:.2f}{discount_note}",
-                font=self.controller.fonts["subheader"],
-                text_color=self.controller.colors["text_main"]
+                font=f.get("subheader", f["body"]),
+                text_color=gold_text if discount_note else c["text_main"]
             ).grid(row=0, column=1, sticky="e")
 
             # Subtle divider between header and item breakdown
-            divider = ctk.CTkFrame(card, height=1, fg_color=self.controller.colors["border"])
-            divider.grid(row=1, column=0, sticky="ew", padx=12, pady=2)
+            divider = ctk.CTkFrame(card, height=1, fg_color=c["border"])
+            divider.grid(row=1, column=0, sticky="ew", padx=14, pady=3)
 
             # Item Breakdown List
             items_frame = ctk.CTkFrame(card, fg_color="transparent")
-            items_frame.grid(row=2, column=0, sticky="ew", padx=18, pady=(4, 8))
+            items_frame.grid(row=2, column=0, sticky="ew", padx=18, pady=(4, 10))
             items_frame.grid_columnconfigure(0, weight=1)
 
             for item_idx, item in enumerate(order["items"]):
                 ctk.CTkLabel(
                     items_frame,
                     text=f"•  {item['quantity']}x {item['name']}  ({item['category']})",
-                    font=self.controller.fonts["body"],
-                    text_color=self.controller.colors["text_main"]
+                    font=f["body"],
+                    text_color=c["text_main"]
                 ).grid(row=item_idx, column=0, sticky="w", pady=1)
 
                 ctk.CTkLabel(
                     items_frame,
                     text=f"₱{item['line_total']:.2f}",
-                    font=self.controller.fonts["body"],
-                    text_color=self.controller.colors["text_muted"]
+                    font=f["body"],
+                    text_color=c["text_muted"]
                 ).grid(row=item_idx, column=1, sticky="e", pady=1)
 
         self.total_items_label.configure(
@@ -433,3 +478,22 @@ class ProgressFrame(ctk.CTkFrame):
             self.controller.db.import_inventory_from_csv(filepath)
             self.controller.frames["CashierFrame"].load_menu()
             messagebox.showinfo("Success", "Inventory successfully updated from CSV.")
+
+    def apply_theme(self):
+        c = self.controller.colors
+        self.configure(fg_color=c["bg_main"])
+        self.top_bar.configure(fg_color=c["bg_card"], border_color=c["border"])
+        self.bottom_bar.configure(fg_color=c["bg_card"], border_color=c["border"])
+        self.title_label.configure(text_color=c["text_main"])
+        self.total_items_label.configure(text_color=c["text_green"])
+        self.view_mode_selector.configure(
+            fg_color=c["bg_card"],
+            selected_color=c["primary"],
+            selected_hover_color=c["primary_hover"],
+            unselected_color=c["bg_card"],
+            unselected_hover_color=c["border"],
+        )
+        self.data_frame.configure(
+            fg_color=c["bg_card"], border_color=c["border"], label_fg_color=c["border"], label_text_color=c["accent_gold"]
+        )
+        self.load_daily_data()

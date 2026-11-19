@@ -18,7 +18,11 @@ def get_resource_path(relative_path):
 
 class LoginFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
-        super().__init__(parent, fg_color=controller.colors["bg_main"])
+        c = controller.colors
+        f = controller.fonts
+        gold_text = c.get("accent_gold", c.get("brand_gold", "#FACC15"))
+
+        super().__init__(parent, fg_color=c["bg_main"])
         self.controller = controller
         self._last_logo_size = None
 
@@ -28,9 +32,9 @@ class LoginFrame(ctk.CTkFrame):
 
         self.login_card = ctk.CTkFrame(
             self,
-            fg_color=controller.colors["bg_card"],
+            fg_color=c["bg_card"],
             border_width=2,
-            border_color=controller.colors["border"],
+            border_color=c["border"],
             corner_radius=15
         )
         self.login_card.grid(row=1, column=1, padx=20, pady=20, ipadx=40, ipady=30)
@@ -42,19 +46,32 @@ class LoginFrame(ctk.CTkFrame):
         self.title_label = ctk.CTkLabel(
             self.login_card,
             text="ProjectBB Plus",
-            font=self.controller.fonts["title"],
-            text_color=self.controller.colors["text_main"]
+            font=f["title"],
+            text_color=c["text_main"]
         )
-        self.title_label.pack(pady=(5, 20))
+        self.title_label.pack(pady=(5, 2))
+
+        self.subtitle_label = ctk.CTkLabel(
+            self.login_card,
+            text="POS & Kitchen Management",
+            font=f["small"],
+            text_color=gold_text
+        )
+        self.subtitle_label.pack(pady=(0, 18))
 
         self.username_entry = ctk.CTkEntry(
             self.login_card,
             width=280,
             height=45,
             placeholder_text="Username",
-            font=self.controller.fonts["body"]
+            font=f["body"],
+            fg_color=c.get("bg_input", "#0B1120"),
+            border_width=1,
+            border_color=c["border"],
+            text_color="#FFFFFF",
+            placeholder_text_color=c["text_muted"]
         )
-        self.username_entry.pack(pady=10)
+        self.username_entry.pack(pady=8)
 
         self.password_entry = ctk.CTkEntry(
             self.login_card,
@@ -62,18 +79,24 @@ class LoginFrame(ctk.CTkFrame):
             height=45,
             placeholder_text="Password",
             show="*",
-            font=self.controller.fonts["body"]
+            font=f["body"],
+            fg_color=c.get("bg_input", "#0B1120"),
+            border_width=1,
+            border_color=c["border"],
+            text_color="#FFFFFF",
+            placeholder_text_color=c["text_muted"]
         )
-        self.password_entry.pack(pady=10)
+        self.password_entry.pack(pady=8)
 
         self.login_button = ctk.CTkButton(
             self.login_card,
             text="Login",
             width=280,
             height=45,
-            font=self.controller.fonts["button"],
-            fg_color=self.controller.colors["primary"],
-            hover_color=self.controller.colors["primary_hover"],
+            font=f["button"],
+            fg_color=c["primary"],
+            hover_color=c["primary_hover"],
+            text_color="#FFFFFF",
             command=self.attempt_login
         )
         self.login_button.pack(pady=(20, 10))
@@ -83,14 +106,16 @@ class LoginFrame(ctk.CTkFrame):
             text="Exit App",
             width=280,
             height=45,
-            font=self.controller.fonts["button"],
-            fg_color=self.controller.colors["accent_red"],
-            hover_color=self.controller.colors["red_hover"],
+            font=f["button"],
+            fg_color=c["accent_red"],
+            hover_color=c["red_hover"],
+            text_color="#FFFFFF",
             command=self.exit_app
         )
-        self.exit_button.pack(pady=(0, 20))
+        self.exit_button.pack(pady=(0, 15))
 
-        self.password_entry.bind("<Return>", lambda event: self.attempt_login())
+        self.username_entry.bind("<Return>", lambda _event: self.password_entry.focus_set())
+        self.password_entry.bind("<Return>", lambda _event: self.attempt_login())
         self.bind("<Configure>", self._on_resize)
 
     def _on_resize(self, event):
@@ -155,3 +180,19 @@ class LoginFrame(ctk.CTkFrame):
         self.controller.quit()
         self.controller.destroy()
         sys.exit(0)
+
+    def apply_theme(self):
+        c = self.controller.colors
+        self.configure(fg_color=c["bg_main"])
+        self.login_card.configure(fg_color=c["bg_card"], border_color=c["border"])
+        self.title_label.configure(text_color=c["text_main"])
+        self.subtitle_label.configure(text_color=c["accent_gold"])
+        for entry in (self.username_entry, self.password_entry):
+            entry.configure(
+                fg_color=c["bg_input"],
+                border_color=c["border"],
+                text_color=c["text_main"],
+                placeholder_text_color=c["text_muted"],
+            )
+        self.login_button.configure(fg_color=c["primary"], hover_color=c["primary_hover"])
+        self.exit_button.configure(fg_color=c["accent_red"], hover_color=c["red_hover"])
