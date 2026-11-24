@@ -34,7 +34,12 @@ class QueueService:
             }
             for sku, data in cart_items.items()
         ]
-        self.printer.print_receipt(seq_num, receipt_items, total_amount)
+        self.printer.print_receipt(
+            seq_num,
+            receipt_items,
+            total_amount,
+            discount_name=discount_applied,
+        )
         return seq_num, order_id
 
     def mark_order_ready(self, order_id: int, seq_num: int) -> None:

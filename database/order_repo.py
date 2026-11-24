@@ -97,6 +97,25 @@ class OrderRepository:
                 orders_map[oid]["items"].append((row["quantity"], row["item_name"]))
         return list(orders_map.values())
 
+    def get_available_order_dates(self) -> list[str]:
+        """Returns distinct YYYY-MM-DD dates from orders (newest first), always including today."""
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        with self._conn.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT DISTINCT SUBSTR(order_date, 1, 10) AS date_str
+                FROM orders
+                WHERE order_date IS NOT NULL AND LENGTH(TRIM(order_date)) >= 10
+                ORDER BY date_str DESC
+                """
+            )
+            dates = [row["date_str"] for row in cursor.fetchall() if row["date_str"]]
+
+        if today_str not in dates:
+            dates.insert(0, today_str)
+        return dates
+
     def get_daily_item_tally(self, date_str: str) -> list[tuple[str, int, float]]:
         """Returns [(item_name, total_qty, total_earned)] for COMPLETED orders on date_str."""
         with self._conn.get_connection() as conn:

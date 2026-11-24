@@ -34,8 +34,15 @@ class DatabaseManager:
     def get_inventory_categories(self) -> list[str]:
         return self.inventory.get_categories()
 
-    def get_menu_items(self, category: str = "All Categories", sort_by: str = "Name (Asc)") -> list:
-        return self.inventory.get_menu_items(category=category, sort_by=sort_by)
+    def get_menu_items(
+        self,
+        category: str = "All Categories",
+        sort_by: str = "Name (Asc)",
+        search_query: str = "",
+    ) -> list:
+        return self.inventory.get_menu_items(
+            category=category, sort_by=sort_by, search_query=search_query
+        )
 
     def add_inventory_item(
         self, sku: str, name: str, price: float, category: str, image_path: str = ""
@@ -57,6 +64,9 @@ class DatabaseManager:
 
     def get_active_orders(self, include_category: bool = False) -> list[dict]:
         return self.orders.get_active_orders(include_category=include_category)
+
+    def get_available_order_dates(self) -> list[str]:
+        return self.orders.get_available_order_dates()
 
     def get_daily_item_tally(self, date_str: str) -> list[tuple[str, int, float]]:
         return self.orders.get_daily_item_tally(date_str)

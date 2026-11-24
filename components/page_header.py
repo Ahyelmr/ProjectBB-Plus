@@ -24,6 +24,8 @@ class PageHeader(ctk.CTkFrame):
             border_color=c["border"],
         )
         self.controller = controller
+        self._last_logo_size = logo_size
+        self._resize_job = None
 
         self.back_btn = ctk.CTkButton(
             self,
@@ -56,9 +58,29 @@ class PageHeader(ctk.CTkFrame):
         self.right_slot = ctk.CTkFrame(self, fg_color="transparent")
         self.right_slot.pack(side="right", padx=12, pady=10)
 
-    def scale_logo_for_height(self, height: int, min_px: int = 36, max_px: int = 52, ratio: float = 0.055) -> None:
-        if height > 100 and self.logo.has_logo:
-            target = max(min_px, min(max_px, int(height * ratio)))
+    def scale_logo_for_height(
+        self, height: int, min_px: int = 36, max_px: int = 52, ratio: float = 0.055
+    ) -> None:
+        if height <= 100 or not self.logo.has_logo:
+            return
+
+        target = max(min_px, min(max_px, int(height * ratio)))
+        if target == self._last_logo_size:
+            return
+
+        if self._resize_job is not None:
+            try:
+                self.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        self._resize_job = self.after(60, lambda t=target: self._apply_logo_size(t))
+
+    def _apply_logo_size(self, target: int) -> None:
+        self._resize_job = None
+        if not self.winfo_exists() or not self.logo.has_logo:
+            return
+        if target != self._last_logo_size:
+            self._last_logo_size = target
             self.logo.set_max_size(target, target)
 
     def apply_theme(self) -> None:

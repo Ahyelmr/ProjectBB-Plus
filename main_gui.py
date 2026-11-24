@@ -9,6 +9,7 @@ from views.login_view import LoginFrame
 from views.cashier.cashier_view import CashierFrame
 from views.kitchen_view import KitchenFrame
 from views.progress.progress_view import ProgressFrame
+from views.inventory_view import InventoryFrame
 from views.settings_view import SettingsFrame
 
 ctk.set_default_color_theme("blue")
@@ -43,7 +44,14 @@ class ProjectBBApp(ctk.CTk):
         self.container.grid_columnconfigure(0, weight=1)
 
         self.frames = {}
-        for frame_cls in (LoginFrame, CashierFrame, KitchenFrame, ProgressFrame, SettingsFrame):
+        for frame_cls in (
+            LoginFrame,
+            CashierFrame,
+            KitchenFrame,
+            ProgressFrame,
+            InventoryFrame,
+            SettingsFrame,
+        ):
             frame = frame_cls(parent=self.container, controller=self)
             self.frames[frame_cls.__name__] = frame
             frame.grid(row=0, column=0, sticky="nsew")

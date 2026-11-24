@@ -32,20 +32,35 @@ class InventoryRepository:
             """)
             return [row["category"] for row in cursor.fetchall()]
 
-    def get_menu_items(self, category: str = "All Categories", sort_by: str = "Name (Asc)") -> list:
+    def get_menu_items(
+        self,
+        category: str = "All Categories",
+        sort_by: str = "Name (Asc)",
+        search_query: str = "",
+    ) -> list:
         order_clause = SORT_CLAUSES.get(sort_by, "name ASC")
+        conditions = []
+        params = []
+
+        if category and category != "All Categories":
+            conditions.append("category = ?")
+            params.append(category)
+
+        clean_query = (search_query or "").strip().lower()
+        if clean_query:
+            conditions.append("(LOWER(name) LIKE ? OR LOWER(sku) LIKE ?)")
+            like_pattern = f"%{clean_query}%"
+            params.extend([like_pattern, like_pattern])
+
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
-            if category == "All Categories":
-                cursor.execute(
-                    f"SELECT sku, name, price, category, image_path FROM inventory ORDER BY {order_clause}"
-                )
-            else:
-                cursor.execute(
-                    f"SELECT sku, name, price, category, image_path FROM inventory "
-                    f"WHERE category = ? ORDER BY {order_clause}",
-                    (category,),
-                )
+            cursor.execute(
+                f"SELECT sku, name, price, category, image_path FROM inventory "
+                f"{where_sql} ORDER BY {order_clause}",
+                tuple(params),
+            )
             return cursor.fetchall()
 
     def add_item(

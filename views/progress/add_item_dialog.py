@@ -10,19 +10,22 @@ class AddItemDialog(ctk.CTkToplevel):
 
     def __init__(self, parent, controller, on_saved=None):
         super().__init__(parent)
+        self.withdraw()
+
         self.controller = controller
         self.on_saved = on_saved
         self._selected_source_path = ""
+        self._saving = False
 
         c = controller.colors
         f = controller.fonts
         self.title("Add Menu / Inventory Item")
         self.configure(fg_color=c["bg_main"])
         self.transient(parent.winfo_toplevel())
-        self.grab_set()
 
         root = parent.winfo_toplevel()
-        root.update_idletasks()
+        if root.winfo_width() <= 1 or root.winfo_height() <= 1:
+            root.update_idletasks()
         win_w = 500
         win_h = min(560, max(420, root.winfo_height() - 60))
         x = root.winfo_x() + (root.winfo_width() - win_w) // 2
@@ -37,6 +40,10 @@ class AddItemDialog(ctk.CTkToplevel):
 
         self._build_form(c, f)
         self._build_footer(c, f)
+
+        self.deiconify()
+        self.lift()
+        self.grab_set()
         self.sku_entry.focus_set()
 
     def _build_form(self, c: dict, f: dict) -> None:
@@ -158,7 +165,7 @@ class AddItemDialog(ctk.CTkToplevel):
             command=self.destroy,
         ).grid(row=0, column=0, sticky="ew", padx=(12, 6), pady=10)
 
-        ctk.CTkButton(
+        self.save_btn = ctk.CTkButton(
             footer,
             text="Save Menu Item",
             height=38,
@@ -167,11 +174,20 @@ class AddItemDialog(ctk.CTkToplevel):
             hover_color=c["gold_hover"],
             text_color=c["text_on_gold"],
             command=self._save_item,
-        ).grid(row=0, column=1, sticky="ew", padx=(6, 12), pady=10)
+        )
+        self.save_btn.grid(row=0, column=1, sticky="ew", padx=(6, 12), pady=10)
 
-    def _on_mousewheel(self, event) -> None:
-        if self.form_scroll.winfo_exists():
-            self.form_scroll._parent_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    def _on_mousewheel(self, event):
+        if not self.form_scroll.winfo_exists() or event.delta == 0:
+            return None
+        canvas = self.form_scroll._parent_canvas
+        if canvas.yview() == (0.0, 1.0):
+            return "break"
+        step = int(-1 * (event.delta / 120))
+        if step == 0:
+            step = -1 if event.delta > 0 else 1
+        canvas.yview_scroll(step, "units")
+        return "break"
 
     def _browse_image(self) -> None:
         file_path = filedialog.askopenfilename(
@@ -185,6 +201,9 @@ class AddItemDialog(ctk.CTkToplevel):
             self.image_entry.insert(0, os.path.basename(file_path))
 
     def _save_item(self) -> None:
+        if self._saving:
+            return
+
         sku_val = self.sku_entry.get().strip().upper()
         name_val = self.name_entry.get().strip()
         price_val = self.price_entry.get().strip()
@@ -215,31 +234,40 @@ class AddItemDialog(ctk.CTkToplevel):
             if not confirm:
                 return
 
-        relative_image_path = ""
-        if self._selected_source_path:
-            try:
-                assets_dir = get_assets_dir()
-                os.makedirs(assets_dir, exist_ok=True)
-                filename = os.path.basename(self._selected_source_path)
-                dest_path = os.path.join(assets_dir, filename)
-                if os.path.abspath(self._selected_source_path) != os.path.abspath(dest_path):
-                    shutil.copy2(self._selected_source_path, dest_path)
-                relative_image_path = f"assets/{filename}"
-            except Exception as e:
-                messagebox.showerror("Image Error", f"Could not copy image to assets folder:\n{e}", parent=self)
-                return
+        self._saving = True
+        self.save_btn.configure(state="disabled")
+        try:
+            relative_image_path = ""
+            if self._selected_source_path:
+                try:
+                    assets_dir = get_assets_dir()
+                    os.makedirs(assets_dir, exist_ok=True)
+                    filename = os.path.basename(self._selected_source_path)
+                    dest_path = os.path.join(assets_dir, filename)
+                    if os.path.abspath(self._selected_source_path) != os.path.abspath(dest_path):
+                        shutil.copy2(self._selected_source_path, dest_path)
+                    relative_image_path = f"assets/{filename}"
+                except Exception as e:
+                    messagebox.showerror(
+                        "Image Error", f"Could not copy image to assets folder:\n{e}", parent=self
+                    )
+                    return
 
-        success, msg = self.controller.db.add_inventory_item(
-            sku=sku_val,
-            name=name_val,
-            price=numeric_price,
-            category=category_val,
-            image_path=relative_image_path,
-        )
-        if success:
-            if callable(self.on_saved):
-                self.on_saved()
-            messagebox.showinfo("Item Saved", msg, parent=self)
-            self.destroy()
-        else:
-            messagebox.showerror("Save Failed", msg, parent=self)
+            success, msg = self.controller.db.add_inventory_item(
+                sku=sku_val,
+                name=name_val,
+                price=numeric_price,
+                category=category_val,
+                image_path=relative_image_path,
+            )
+            if success:
+                if callable(self.on_saved):
+                    self.on_saved()
+                messagebox.showinfo("Item Saved", msg, parent=self)
+                self.destroy()
+            else:
+                messagebox.showerror("Save Failed", msg, parent=self)
+        finally:
+            self._saving = False
+            if self.winfo_exists() and self.save_btn.winfo_exists():
+                self.save_btn.configure(state="normal")
