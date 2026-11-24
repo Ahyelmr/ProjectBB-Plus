@@ -1,7 +1,7 @@
 import os
-import sys
 import json
 import customtkinter as ctk
+from core.paths import get_project_root
 
 DEFAULT_GEOMETRY = "1280x720"
 MIN_GEOMETRY = "820x560"
@@ -119,15 +119,12 @@ DEFAULT_SETTINGS = {
 }
 
 
-def get_settings_path():
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.abspath(os.path.dirname(__file__))
-    return os.path.join(base_dir, "settings.json")
+def get_settings_path() -> str:
+    """Stores settings.json in the project root (or next to the .exe when frozen)."""
+    return os.path.join(get_project_root(), "settings.json")
 
 
-def load_settings():
+def load_settings() -> dict:
     settings = DEFAULT_SETTINGS.copy()
     path = get_settings_path()
     if os.path.exists(path):
@@ -146,7 +143,7 @@ def load_settings():
     return settings
 
 
-def save_settings(settings):
+def save_settings(settings: dict) -> None:
     path = get_settings_path()
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -159,14 +156,14 @@ def save_settings(settings):
 COLORS = THEME_PRESETS["Dark Slate"].copy()
 
 
-def apply_color_preset(colors_dict, theme_name):
+def apply_color_preset(colors_dict: dict, theme_name: str) -> None:
     preset = THEME_PRESETS.get(theme_name, THEME_PRESETS["Dark Slate"])
     colors_dict.clear()
     colors_dict.update(preset)
     ctk.set_appearance_mode(preset["appearance"])
 
 
-def get_fonts(size_preset="Medium"):
+def get_fonts(size_preset: str = "Medium") -> dict:
     p = FONT_PRESETS.get(size_preset, FONT_PRESETS["Medium"])
     return {
         "title": ctk.CTkFont(family="Segoe UI", size=p["title"], weight="bold"),
@@ -179,7 +176,7 @@ def get_fonts(size_preset="Medium"):
     }
 
 
-def apply_font_preset(fonts_dict, size_preset):
+def apply_font_preset(fonts_dict: dict, size_preset: str) -> None:
     """Mutates existing CTkFont instances in-place so all bound widgets update immediately."""
     p = FONT_PRESETS.get(size_preset, FONT_PRESETS["Medium"])
     for key in ("title", "header", "subheader", "body", "button", "menu_item", "small"):

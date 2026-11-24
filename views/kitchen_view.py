@@ -1,220 +1,158 @@
-import os
-import sys
 import customtkinter as ctk
-from PIL import Image
-
-
-def get_resource_path(relative_path):
-    """Resolves asset paths for both standard execution and PyInstaller bundles."""
-    if not relative_path:
-        return ""
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-    return os.path.join(base_path, relative_path)
+from components.page_header import PageHeader
 
 
 class KitchenFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
         c = controller.colors
         f = controller.fonts
-        gold_bg = c.get("accent_gold", c.get("brand_gold", "#FACC15"))
-        gold_hv = c.get("gold_hover", c.get("brand_gold_hover", "#EAB308"))
-        green_text = c.get("text_green", "#4ADE80")
-
         super().__init__(parent, fg_color=c["bg_main"])
         self.controller = controller
-        self._last_logo_size = None
 
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure((0, 1), weight=1, uniform="kds_cols")
 
-        # Top Navigation & Controls
-        self.top_bar = ctk.CTkFrame(
-            self, height=56, fg_color=c["bg_card"],
-            corner_radius=12, border_width=1, border_color=c["border"]
+        self.header = PageHeader(
+            self,
+            controller=controller,
+            title="Kitchen Display System (KDS)",
+            back_command=self._go_back,
+            logo_size=44,
         )
-        self.top_bar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=(10, 5))
-
-        self.back_btn = ctk.CTkButton(
-            self.top_bar,
-            text="Back to Cashier",
-            width=145,
-            height=36,
-            font=f["button"],
-            fg_color=c["primary"],
-            hover_color=c["primary_hover"],
-            text_color="#FFFFFF",
-            command=lambda: [
-                self.controller.frames["CashierFrame"].refresh_kitchen_queue(),
-                controller.show_frame("CashierFrame")
-            ]
-        )
-        self.back_btn.pack(side="left", padx=12, pady=10)
-
-        # Centered Header Container (Logo + Title)
-        self.header_center = ctk.CTkFrame(self.top_bar, fg_color="transparent")
-        self.header_center.pack(side="left", expand=True)
-
-        self.logo_label = ctk.CTkLabel(self.header_center, text="")
-        
-
-        self.title_label = ctk.CTkLabel(
-            self.header_center,
-            text="Kitchen Display System (KDS)",
-            font=f["header"],
-            text_color=c["text_main"]
-        )
-        self.title_label.pack(side="left", padx=6)
-
-        self._update_logo(44, 44)
+        self.header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=(10, 5))
 
         self.refresh_btn = ctk.CTkButton(
-            self.top_bar,
+            self.header.right_slot,
             text="Refresh Queue",
             width=135,
             height=36,
             font=f["button"],
-            fg_color=gold_bg,
-            hover_color=gold_hv,
-            text_color=c.get("text_on_gold", "#0F172A"),
-            command=self.load_orders
+            fg_color=c["accent_gold"],
+            hover_color=c["gold_hover"],
+            text_color=c["text_on_gold"],
+            command=self.load_orders,
         )
-        self.refresh_btn.pack(side="right", padx=12, pady=10)
+        self.refresh_btn.pack()
 
-        # Column 0: Orders Being Prepared
-        self.prep_column = ctk.CTkScrollableFrame(
-            self,
-            label_text="Preparing",
-            label_font=f["header"],
-            label_fg_color=c["border"],
-            label_text_color=gold_bg,
-            fg_color=c["bg_card"],
-            corner_radius=12,
-            border_width=1,
-            border_color=c["border"],
-            scrollbar_button_color=c["border"],
-            scrollbar_button_hover_color=c["text_muted"]
-        )
-        self.prep_column.grid(row=1, column=0, sticky="nsew", padx=(10, 5), pady=(5, 10))
+        self.prep_column = self._create_column("Preparing", c["accent_gold"], col=0, padx=(10, 5))
+        self.ready_column = self._create_column("Ready for Pickup", c["text_green"], col=1, padx=(5, 10))
 
-        # Column 1: Orders Ready for Pickup
-        self.ready_column = ctk.CTkScrollableFrame(
-            self,
-            label_text="Ready for Pickup",
-            label_font=f["header"],
-            label_fg_color=c["border"],
-            label_text_color=green_text,
-            fg_color=c["bg_card"],
-            corner_radius=12,
-            border_width=1,
-            border_color=c["border"],
-            scrollbar_button_color=c["border"],
-            scrollbar_button_hover_color=c["text_muted"]
-        )
-        self.ready_column.grid(row=1, column=1, sticky="nsew", padx=(5, 10), pady=(5, 10))
-
-        self.bind("<Configure>", self._on_resize)
+        self.bind("<Configure>", lambda e: self.header.scale_logo_for_height(e.height, 38, 54, 0.06))
         self.load_orders()
 
-    def _on_resize(self, event):
-        """Scales the KDS header logo proportionally to window height."""
-        if event.height > 100:
-            target = max(38, min(54, int(event.height * 0.06)))
-            self._update_logo(target, target)
+    def _create_column(self, title: str, title_color: str, col: int, padx: tuple[int, int]):
+        c = self.controller.colors
+        f = self.controller.fonts
+        column = ctk.CTkScrollableFrame(
+            self,
+            label_text=title,
+            label_font=f["header"],
+            label_fg_color=c["border"],
+            label_text_color=title_color,
+            fg_color=c["bg_card"],
+            corner_radius=12,
+            border_width=1,
+            border_color=c["border"],
+            scrollbar_button_color=c["border"],
+            scrollbar_button_hover_color=c["text_muted"],
+        )
+        column.grid(row=1, column=col, sticky="nsew", padx=padx, pady=(5, 10))
+        return column
 
-    def _update_logo(self, max_w, max_h):
-        logo_path = get_resource_path("assets/logo.png")
-        if not os.path.exists(logo_path):
-            self.logo_label.pack_forget()
-            return
+    def _go_back(self):
+        self.controller.frames["CashierFrame"].refresh_kitchen_queue(force=True)
+        self.controller.show_frame("CashierFrame")
 
-        try:
-            with Image.open(logo_path) as img:
-                orig_w, orig_h = img.size
-                ratio = min(max_w / orig_w, max_h / orig_h)
-                new_size = (max(1, int(orig_w * ratio)), max(1, int(orig_h * ratio)))
+    def on_show(self):
+        self.load_orders()
 
-                if new_size == self._last_logo_size:
-                    return
-                self._last_logo_size = new_size
+    def _fetch_active_orders(self) -> list[dict]:
+        """Uses the repository method once Batch 3 is installed, with a direct fallback for now."""
+        if hasattr(self.controller.db, "get_active_orders"):
+            return self.controller.db.get_active_orders(include_category=True)
 
-                resized = img.resize(new_size, Image.Resampling.LANCZOS)
-                ctk_img = ctk.CTkImage(light_image=resized, dark_image=resized, size=new_size)
-                self.logo_label.configure(image=ctk_img)
-                if not self.logo_label.winfo_ismapped():
-                    self.logo_label.pack(side="left", before=self.title_label, padx=(0, 8))
-        except Exception as e:
-            print(f"Logo load error (KitchenFrame): {e}")
+        with self.controller.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    orders.order_id,
+                    orders.sequence_number,
+                    orders.status,
+                    order_items.quantity,
+                    inventory.name AS item_name,
+                    inventory.category
+                FROM orders
+                JOIN order_items ON orders.order_id = order_items.order_id
+                JOIN inventory ON order_items.sku = inventory.sku
+                WHERE orders.status IN ('PREPARING', 'PENDING', 'READY')
+                ORDER BY orders.sequence_number ASC, orders.order_id ASC, order_items.item_id ASC
+            """)
+            rows = cursor.fetchall()
+
+        orders_map = {}
+        for row in rows:
+            oid = row["order_id"]
+            if oid not in orders_map:
+                orders_map[oid] = {
+                    "order_id": oid,
+                    "sequence_number": row["sequence_number"],
+                    "status": row["status"],
+                    "items": [],
+                }
+            orders_map[oid]["items"].append((row["quantity"], row["item_name"], row["category"]))
+        return list(orders_map.values())
 
     def load_orders(self):
-        """Clears and reloads Preparing and Ready for Pickup tickets separately."""
         for widget in self.prep_column.winfo_children():
             widget.destroy()
         for widget in self.ready_column.winfo_children():
             widget.destroy()
 
-        with self.controller.db._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT order_id, sequence_number, status
-                FROM orders
-                WHERE status IN ('PREPARING', 'PENDING', 'READY')
-                ORDER BY sequence_number ASC
-            """)
-            orders = cursor.fetchall()
+        for order in self._fetch_active_orders():
+            item_lines = [
+                f"{qty}x {name}  ({cat})" if cat else f"{qty}x {name}"
+                for qty, name, cat in order["items"]
+            ]
+            item_text = "\n".join(item_lines)
 
-            for order in orders:
-                order_id = order["order_id"]
-                seq_num = order["sequence_number"]
-                status = order["status"]
+            if order["status"] in ("PREPARING", "PENDING"):
+                self._create_prep_card(order["order_id"], order["sequence_number"], item_text)
+            elif order["status"] == "READY":
+                self._create_ready_card(order["order_id"], order["sequence_number"], item_text)
 
-                cursor.execute("""
-                    SELECT inventory.name, inventory.category, order_items.quantity
-                    FROM order_items
-                    JOIN inventory ON order_items.sku = inventory.sku
-                    WHERE order_items.order_id = ?
-                """, (order_id,))
-                items = cursor.fetchall()
-
-                item_text = "\n".join(
-                    [f"{item['quantity']}x {item['name']}  ({item['category']})" for item in items]
-                )
-
-                if status in ("PREPARING", "PENDING"):
-                    self.create_prep_card(order_id, seq_num, item_text)
-                elif status == "READY":
-                    self.create_ready_card(order_id, seq_num, item_text)
-
-    def create_prep_card(self, order_id, seq_num, item_text):
+    def _create_base_card(self, parent, seq_num: int, item_text: str, accent_color: str):
         c = self.controller.colors
         f = self.controller.fonts
-        gold_text = c.get("accent_gold", c.get("brand_gold", "#FACC15"))
 
         card = ctk.CTkFrame(
-            self.prep_column, border_width=1, corner_radius=10,
-            fg_color=c.get("bg_input", "#0B1120"),
-            border_color=gold_text
+            parent,
+            border_width=1,
+            corner_radius=10,
+            fg_color=c["bg_input"],
+            border_color=accent_color,
         )
         card.pack(fill="x", padx=8, pady=6)
 
         ctk.CTkLabel(
-            card, text=f"Order #{seq_num}",
-            font=f["header"],
-            text_color=gold_text,
-            anchor="w"
+            card, text=f"Order #{seq_num}", font=f["header"], text_color=accent_color, anchor="w"
         ).pack(fill="x", padx=14, pady=(10, 4))
 
         ctk.CTkLabel(
-            card, text=item_text,
+            card,
+            text=item_text,
             justify="left",
             anchor="w",
             wraplength=420,
             font=f["body"],
-            text_color=c["text_main"]
+            text_color=c["text_main"],
         ).pack(fill="x", padx=14, pady=(2, 10))
+        return card
+
+    def _create_prep_card(self, order_id: int, seq_num: int, item_text: str):
+        c = self.controller.colors
+        f = self.controller.fonts
+        card = self._create_base_card(self.prep_column, seq_num, item_text, c["accent_gold"])
 
         ctk.CTkButton(
             card,
@@ -224,40 +162,13 @@ class KitchenFrame(ctk.CTkFrame):
             fg_color=c["primary"],
             hover_color=c["primary_hover"],
             text_color="#FFFFFF",
-            command=lambda: [
-                self.controller.queue.mark_order_ready(order_id, seq_num),
-                self.load_orders(),
-                self.controller.frames["CashierFrame"].refresh_kitchen_queue()
-            ]
+            command=lambda oid=order_id, seq=seq_num: self._mark_ready(oid, seq),
         ).pack(fill="x", padx=14, pady=(0, 12))
 
-    def create_ready_card(self, order_id, seq_num, item_text):
+    def _create_ready_card(self, order_id: int, seq_num: int, item_text: str):
         c = self.controller.colors
         f = self.controller.fonts
-        green_text = c.get("text_green", "#4ADE80")
-
-        card = ctk.CTkFrame(
-            self.ready_column, border_width=1, corner_radius=10,
-            fg_color=c.get("bg_input", "#0B1120"),
-            border_color=green_text
-        )
-        card.pack(fill="x", padx=8, pady=6)
-
-        ctk.CTkLabel(
-            card, text=f"Order #{seq_num}",
-            font=f["header"],
-            text_color=green_text,
-            anchor="w"
-        ).pack(fill="x", padx=14, pady=(10, 4))
-
-        ctk.CTkLabel(
-            card, text=item_text,
-            justify="left",
-            anchor="w",
-            wraplength=420,
-            font=f["body"],
-            text_color=c["text_main"]
-        ).pack(fill="x", padx=14, pady=(2, 10))
+        card = self._create_base_card(self.ready_column, seq_num, item_text, c["text_green"])
 
         btn_frame = ctk.CTkFrame(card, fg_color="transparent")
         btn_frame.pack(fill="x", padx=12, pady=(0, 12))
@@ -271,7 +182,7 @@ class KitchenFrame(ctk.CTkFrame):
             fg_color=c["primary"],
             hover_color=c["primary_hover"],
             text_color="#FFFFFF",
-            command=lambda: self.controller.queue._play_announcement(seq_num)
+            command=lambda seq=seq_num: self.controller.tts.announce_order(seq),
         ).grid(row=0, column=0, padx=4, sticky="ew")
 
         ctk.CTkButton(
@@ -282,26 +193,36 @@ class KitchenFrame(ctk.CTkFrame):
             fg_color=c["accent_green"],
             hover_color=c["green_hover"],
             text_color="#FFFFFF",
-            command=lambda: [
-                self.controller.queue.complete_order(order_id),
-                self.load_orders(),
-                self.controller.frames["CashierFrame"].refresh_kitchen_queue()
-            ]
+            command=lambda oid=order_id: self._complete_order(oid),
         ).grid(row=0, column=1, padx=4, sticky="ew")
+
+    def _mark_ready(self, order_id: int, seq_num: int):
+        self.controller.queue.mark_order_ready(order_id, seq_num)
+        self.load_orders()
+        self.controller.frames["CashierFrame"].refresh_kitchen_queue(force=True)
+
+    def _complete_order(self, order_id: int):
+        self.controller.queue.complete_order(order_id)
+        self.load_orders()
+        self.controller.frames["CashierFrame"].refresh_kitchen_queue(force=True)
 
     def apply_theme(self):
         c = self.controller.colors
         self.configure(fg_color=c["bg_main"])
-        self.top_bar.configure(fg_color=c["bg_card"], border_color=c["border"])
-        self.title_label.configure(text_color=c["text_main"])
-        self.back_btn.configure(fg_color=c["primary"], hover_color=c["primary_hover"])
+        self.header.apply_theme()
         self.refresh_btn.configure(
             fg_color=c["accent_gold"], hover_color=c["gold_hover"], text_color=c["text_on_gold"]
         )
         self.prep_column.configure(
-            fg_color=c["bg_card"], border_color=c["border"], label_fg_color=c["border"], label_text_color=c["accent_gold"]
+            fg_color=c["bg_card"],
+            border_color=c["border"],
+            label_fg_color=c["border"],
+            label_text_color=c["accent_gold"],
         )
         self.ready_column.configure(
-            fg_color=c["bg_card"], border_color=c["border"], label_fg_color=c["border"], label_text_color=c["text_green"]
+            fg_color=c["bg_card"],
+            border_color=c["border"],
+            label_fg_color=c["border"],
+            label_text_color=c["text_green"],
         )
         self.load_orders()
