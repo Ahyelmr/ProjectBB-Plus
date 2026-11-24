@@ -1,5 +1,10 @@
+import os
+import traceback
+from datetime import datetime
+from tkinter import messagebox
 import customtkinter as ctk
 from core import theme
+from core.paths import get_data_dir, get_resource_path
 from database.db_manager import DatabaseManager
 from services.printer_service import PrinterService
 from services.tts_service import TTSService
@@ -21,6 +26,13 @@ class ProjectBBApp(ctk.CTk):
         self.title("ProjectBB Plus - POS System")
         self.geometry(theme.DEFAULT_GEOMETRY)
         self.minsize(*map(int, theme.MIN_GEOMETRY.split("x")))
+
+        ico_path = get_resource_path(os.path.join("assets", "logo.ico"))
+        if ico_path and os.path.exists(ico_path):
+            try:
+                self.iconbitmap(ico_path)
+            except Exception:
+                pass
 
         # Persisted display & usability settings
         self.settings = theme.load_settings()
@@ -84,6 +96,38 @@ class ProjectBBApp(ctk.CTk):
                 frame.on_settings_updated()
 
 
+def _close_pyinstaller_splash() -> None:
+    try:
+        import pyi_splash
+        pyi_splash.close()
+    except Exception:
+        pass
+
+
+def _log_fatal_error() -> str:
+    log_path = os.path.join(get_data_dir(), "crash.log")
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"\n--- {datetime.now().isoformat()} ---\n")
+            f.write(traceback.format_exc())
+    except Exception:
+        pass
+    return log_path
+
+
 if __name__ == "__main__":
-    app = ProjectBBApp()
-    app.mainloop()
+    try:
+        app = ProjectBBApp()
+        _close_pyinstaller_splash()
+        app.mainloop()
+    except Exception as exc:
+        _close_pyinstaller_splash()
+        log_file = _log_fatal_error()
+        try:
+            messagebox.showerror(
+                "ProjectBB Plus - Startup Error",
+                f"An unexpected error occurred:\n{exc}\n\nDetails saved to:\n{log_file}",
+            )
+        except Exception:
+            pass
+        raise

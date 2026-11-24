@@ -1,4 +1,7 @@
+import os
+import shutil
 import sqlite3
+import sys
 from core.paths import get_db_path
 from database.user_repo import UserRepository
 
@@ -7,8 +10,25 @@ class DatabaseConnection:
     """Manages SQLite connections and schema initialization for data/projectbb.db."""
 
     def __init__(self, db_path: str | None = None):
+        self._is_default_db = db_path is None
         self.db_path = db_path or get_db_path()
+        self._seed_bundled_db_if_needed()
         self.init_db()
+
+    def _seed_bundled_db_if_needed(self) -> None:
+        """
+        On first launch of a frozen PyInstaller bundle, copies the pre-loaded
+        starter database from sys._MEIPASS/data/projectbb.db into the writable data/ folder.
+        """
+        if not self._is_default_db or not getattr(sys, "frozen", False):
+            return
+        if os.path.exists(self.db_path):
+            return
+
+        bundled_db = os.path.join(sys._MEIPASS, "data", "projectbb.db")
+        if os.path.exists(bundled_db):
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+            shutil.copy2(bundled_db, self.db_path)
 
     def get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
