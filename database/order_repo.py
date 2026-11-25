@@ -149,6 +149,60 @@ class OrderRepository:
             dates.insert(0, today_str)
         return dates
 
+    def delete_orders_by_date(self, date_str: str) -> tuple[bool, str]:
+        """Permanently deletes all order_items, orders, and daily_sequence rows for a previous date."""
+        clean_date = (date_str or "").strip()[:10]
+        try:
+            datetime.strptime(clean_date, "%Y-%m-%d")
+        except ValueError:
+            return False, f"Invalid date format: '{date_str}'."
+
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        if clean_date >= today_str:
+            return False, "Only sales records from previous dates can be deleted."
+
+        try:
+            with self._conn.get_connection() as conn:
+                cursor = conn.cursor()
+                date_pattern = clean_date + "%"
+
+                cursor.execute(
+                    "SELECT COUNT(*) AS cnt FROM orders WHERE order_date LIKE ?",
+                    (date_pattern,),
+                )
+                order_count = cursor.fetchone()["cnt"]
+
+                if order_count == 0:
+                    cursor.execute(
+                        "DELETE FROM daily_sequence WHERE date_str = ?",
+                        (clean_date,),
+                    )
+                    conn.commit()
+                    return False, f"No sales records found for {clean_date}."
+
+                cursor.execute(
+                    """
+                    DELETE FROM order_items
+                    WHERE order_id IN (
+                        SELECT order_id FROM orders WHERE order_date LIKE ?
+                    )
+                    """,
+                    (date_pattern,),
+                )
+                cursor.execute(
+                    "DELETE FROM orders WHERE order_date LIKE ?",
+                    (date_pattern,),
+                )
+                cursor.execute(
+                    "DELETE FROM daily_sequence WHERE date_str = ?",
+                    (clean_date,),
+                )
+                conn.commit()
+
+            return True, f"Deleted {order_count} sales order record(s) for {clean_date}."
+        except Exception as e:
+            return False, f"Failed to delete sales records: {e}"
+
     def get_daily_item_tally(self, date_str: str) -> list[tuple[str, int, float]]:
         """Returns [(item_name, total_qty, total_earned)] for COMPLETED orders on date_str."""
         with self._conn.get_connection() as conn:

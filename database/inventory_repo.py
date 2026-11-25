@@ -18,7 +18,10 @@ class InventoryRepository:
         clean_sku = sku.strip().upper()
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM inventory WHERE UPPER(sku) = ?", (clean_sku,))
+            cursor.execute(
+                "SELECT 1 FROM inventory WHERE UPPER(sku) = ? AND is_active = 1",
+                (clean_sku,),
+            )
             return cursor.fetchone() is not None
 
     def get_categories(self) -> list[str]:
@@ -27,7 +30,7 @@ class InventoryRepository:
             cursor.execute("""
                 SELECT DISTINCT category
                 FROM inventory
-                WHERE category IS NOT NULL AND TRIM(category) != ''
+                WHERE is_active = 1 AND category IS NOT NULL AND TRIM(category) != ''
                 ORDER BY category ASC
             """)
             return [row["category"] for row in cursor.fetchall()]
@@ -39,7 +42,7 @@ class InventoryRepository:
         search_query: str = "",
     ) -> list:
         order_clause = SORT_CLAUSES.get(sort_by, "name ASC")
-        conditions = []
+        conditions = ["is_active = 1"]
         params = []
 
         if category and category != "All Categories":
@@ -52,7 +55,7 @@ class InventoryRepository:
             like_pattern = f"%{clean_query}%"
             params.extend([like_pattern, like_pattern])
 
-        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where_sql = f"WHERE {' AND '.join(conditions)}"
 
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
@@ -90,13 +93,65 @@ class InventoryRepository:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO inventory (sku, name, price, category, image_path)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO inventory (sku, name, price, category, image_path, is_active)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                    ON CONFLICT(sku) DO UPDATE SET
+                        name = excluded.name,
+                        price = excluded.price,
+                        category = excluded.category,
+                        image_path = excluded.image_path,
+                        is_active = 1
                     """,
                     (clean_sku, clean_name, numeric_price, clean_category, clean_image),
                 )
                 conn.commit()
             return True, f"'{clean_name}' ({clean_sku}) has been saved to the menu."
+        except sqlite3.Error as e:
+            return False, f"Database error: {e}"
+
+    def delete_item(self, sku: str) -> tuple[bool, str]:
+        """
+        Removes a menu item from active inventory.
+        Soft-deletes (is_active = 0) if referenced by past/active orders to preserve history;
+        hard-deletes if unreferenced.
+        """
+        clean_sku = (sku or "").strip().upper()
+        if not clean_sku:
+            return False, "SKU is required."
+
+        try:
+            with self._conn.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT sku, name FROM inventory WHERE UPPER(sku) = ? AND is_active = 1",
+                    (clean_sku,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return False, f"Menu item '{clean_sku}' was not found."
+
+                stored_sku = row["sku"]
+                item_name = row["name"]
+
+                cursor.execute(
+                    "SELECT 1 FROM order_items WHERE sku = ? LIMIT 1",
+                    (stored_sku,),
+                )
+                has_orders = cursor.fetchone() is not None
+
+                if has_orders:
+                    cursor.execute(
+                        "UPDATE inventory SET is_active = 0 WHERE sku = ?",
+                        (stored_sku,),
+                    )
+                else:
+                    cursor.execute(
+                        "DELETE FROM inventory WHERE sku = ?",
+                        (stored_sku,),
+                    )
+
+                conn.commit()
+            return True, f"'{item_name}' ({stored_sku}) has been deleted from the menu."
         except sqlite3.Error as e:
             return False, f"Database error: {e}"
 
@@ -116,9 +171,23 @@ class InventoryRepository:
                         try:
                             price = float(price_raw)
                             cursor.execute(
-                                "INSERT OR REPLACE INTO inventory (sku, name, price, category, image_path) "
-                                "VALUES (?, ?, ?, ?, ?)",
-                                (sku.strip().upper(), name.strip(), price, category.strip(), image_path.strip()),
+                                """
+                                INSERT INTO inventory (sku, name, price, category, image_path, is_active)
+                                VALUES (?, ?, ?, ?, ?, 1)
+                                ON CONFLICT(sku) DO UPDATE SET
+                                    name = excluded.name,
+                                    price = excluded.price,
+                                    category = excluded.category,
+                                    image_path = excluded.image_path,
+                                    is_active = 1
+                                """,
+                                (
+                                    sku.strip().upper(),
+                                    name.strip(),
+                                    price,
+                                    category.strip(),
+                                    image_path.strip(),
+                                ),
                             )
                         except ValueError:
                             continue

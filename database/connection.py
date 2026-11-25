@@ -62,7 +62,8 @@ class DatabaseConnection:
                     name TEXT NOT NULL,
                     price REAL NOT NULL,
                     category TEXT NOT NULL,
-                    image_path TEXT
+                    image_path TEXT,
+                    is_active INTEGER NOT NULL DEFAULT 1
                 )
             """)
 
@@ -109,6 +110,14 @@ class DatabaseConnection:
             if "change_amount" not in existing_order_cols:
                 cursor.execute(
                     "ALTER TABLE orders ADD COLUMN change_amount REAL NOT NULL DEFAULT 0.0"
+                )
+
+            # Non-destructive migration for existing inventory tables lacking is_active
+            cursor.execute("PRAGMA table_info(inventory)")
+            existing_inv_cols = {row["name"] for row in cursor.fetchall()}
+            if "is_active" not in existing_inv_cols:
+                cursor.execute(
+                    "ALTER TABLE inventory ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
                 )
 
             # Seed default accounts with PBKDF2-SHA256 hashes

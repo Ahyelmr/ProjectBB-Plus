@@ -335,12 +335,42 @@ class InventoryFrame(ctk.CTkFrame):
                 text=f"₱{price:,.2f}",
                 font=f["subheader"],
                 text_color=c["text_green"],
-            ).grid(row=0, column=4, sticky="e", padx=(8, 16), pady=10)
+            ).grid(row=0, column=4, sticky="e", padx=(8, 12), pady=10)
+
+            ctk.CTkButton(
+                row_card,
+                text="Delete",
+                width=74,
+                height=30,
+                font=f["small"],
+                fg_color=c["accent_red"],
+                hover_color=c["red_hover"],
+                text_color="#FFFFFF",
+                command=lambda s=sku, n=name: self._confirm_delete_item(s, n),
+            ).grid(row=0, column=5, sticky="e", padx=(0, 12), pady=8)
 
         if end_idx < len(self.inventory_items):
             self._render_job = self.after(
                 self.RENDER_DELAY_MS, lambda: self._render_batch(end_idx, token)
             )
+
+    def _confirm_delete_item(self, sku: str, name: str) -> None:
+        confirmed = messagebox.askyesno(
+            "Confirm Delete Menu Item",
+            f"Are you sure you want to delete '{name}' ({sku}) from the menu?\n\n"
+            "Past sales records will remain intact.",
+        )
+        if not confirmed:
+            return
+
+        success, msg = self.controller.db.delete_inventory_item(sku)
+        if success:
+            self._inventory_dirty = True
+            self._refresh_categories()
+            self.load_inventory()
+            messagebox.showinfo("Item Deleted", msg)
+        else:
+            messagebox.showerror("Delete Failed", msg)
 
     def open_add_item_dialog(self) -> None:
         def _on_saved():

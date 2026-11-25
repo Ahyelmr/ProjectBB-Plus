@@ -49,6 +49,9 @@ class DatabaseManager:
     ) -> tuple[bool, str]:
         return self.inventory.add_item(sku, name, price, category, image_path)
 
+    def delete_inventory_item(self, sku: str) -> tuple[bool, str]:
+        return self.inventory.delete_item(sku)
+
     def import_inventory_from_csv(self, filepath: str) -> None:
         self.inventory.import_from_csv(filepath)
 
@@ -80,6 +83,9 @@ class DatabaseManager:
 
     def get_available_order_dates(self) -> list[str]:
         return self.orders.get_available_order_dates()
+
+    def delete_sales_records_by_date(self, date_str: str) -> tuple[bool, str]:
+        return self.orders.delete_orders_by_date(date_str)
 
     def get_daily_item_tally(self, date_str: str) -> list[tuple[str, int, float]]:
         return self.orders.get_daily_item_tally(date_str)

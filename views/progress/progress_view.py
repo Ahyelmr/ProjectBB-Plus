@@ -4,6 +4,7 @@ import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from components.page_header import PageHeader
 from views.progress.add_item_dialog import AddItemDialog
+from views.progress.delete_item_dialog import DeleteItemDialog
 
 
 class ProgressFrame(ctk.CTkFrame):
@@ -144,6 +145,20 @@ class ProgressFrame(ctk.CTkFrame):
         )
         self.next_date_btn.pack(side="left")
 
+        self.delete_date_btn = ctk.CTkButton(
+            date_controls,
+            text="Delete Date",
+            width=98,
+            height=34,
+            font=f["small"],
+            fg_color=c["border"],
+            hover_color=c.get("danger_hover", "#B91C1C"),
+            text_color=c["text_muted"],
+            state="disabled",
+            command=self._delete_selected_date_records,
+        )
+        self.delete_date_btn.pack(side="left", padx=(8, 0))
+
         # Row 2: Data Display Area
         self.data_frame = ctk.CTkScrollableFrame(
             self,
@@ -199,6 +214,18 @@ class ProgressFrame(ctk.CTkFrame):
         )
         self.import_btn.pack(side="right", padx=6, pady=10)
 
+        self.delete_item_btn = ctk.CTkButton(
+            self.bottom_bar,
+            text="- Delete Menu Item",
+            height=36,
+            font=f["button"],
+            fg_color=c.get("danger", "#DC2626"),
+            hover_color=c.get("danger_hover", "#B91C1C"),
+            text_color="#FFFFFF",
+            command=self.open_delete_item_dialog,
+        )
+        self.delete_item_btn.pack(side="right", padx=6, pady=10)
+
         self.add_item_btn = ctk.CTkButton(
             self.bottom_bar,
             text="+ Add Menu Item",
@@ -253,6 +280,27 @@ class ProgressFrame(ctk.CTkFrame):
         raw = self.date_var.get().strip()
         return raw.split(" ")[0] if raw else datetime.now().strftime("%Y-%m-%d")
 
+    def _update_delete_date_button_state(self) -> None:
+        c = self.controller.colors
+        selected_date = self._get_selected_date()
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        can_delete = selected_date < today_str and selected_date in self._available_dates
+
+        if can_delete:
+            self.delete_date_btn.configure(
+                state="normal",
+                fg_color=c.get("danger", "#DC2626"),
+                hover_color=c.get("danger_hover", "#B91C1C"),
+                text_color="#FFFFFF",
+            )
+        else:
+            self.delete_date_btn.configure(
+                state="disabled",
+                fg_color=c["border"],
+                hover_color=c["border"],
+                text_color=c["text_muted"],
+            )
+
     def _refresh_date_options(self, keep_selected: bool = False) -> None:
         previous_date = self._get_selected_date() if keep_selected else None
         self._available_dates = self.controller.db.get_available_order_dates()
@@ -263,6 +311,8 @@ class ProgressFrame(ctk.CTkFrame):
             self.date_var.set(self._format_date_option(previous_date))
         else:
             self.date_var.set(formatted_values[0])
+
+        self._update_delete_date_button_state()
 
     def _select_previous_date(self) -> None:
         if not self._available_dates:
@@ -284,6 +334,32 @@ class ProgressFrame(ctk.CTkFrame):
                 self.date_var.set(self._format_date_option(self._available_dates[idx - 1]))
                 self._on_date_changed()
 
+    def _delete_selected_date_records(self) -> None:
+        selected_date = self._get_selected_date()
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        if selected_date >= today_str:
+            messagebox.showwarning(
+                "Action Not Allowed",
+                "Today's sales records cannot be deleted. Select a previous date instead.",
+            )
+            return
+
+        confirmed = messagebox.askyesno(
+            "Delete Sales Record Date",
+            f"Are you sure you want to permanently delete all sales and order records for {selected_date}?\n\n"
+            "This action cannot be undone.",
+        )
+        if not confirmed:
+            return
+
+        success, msg = self.controller.db.delete_sales_records_by_date(selected_date)
+        if success:
+            messagebox.showinfo("Records Deleted", msg)
+            self.load_daily_data(keep_selected_date=False)
+        else:
+            messagebox.showerror("Delete Failed", msg)
+
     def _update_section_header(self) -> None:
         selected_date = self._get_selected_date()
         is_today = selected_date == datetime.now().strftime("%Y-%m-%d")
@@ -302,6 +378,7 @@ class ProgressFrame(ctk.CTkFrame):
         self.data_frame.configure(label_text=label)
 
     def _on_date_changed(self) -> None:
+        self._update_delete_date_button_state()
         self._update_section_header()
         self.load_daily_data(keep_selected_date=True)
 
@@ -593,6 +670,12 @@ class ProgressFrame(ctk.CTkFrame):
 
         AddItemDialog(self, self.controller, on_saved=_mark_inventory_dirty)
 
+    def open_delete_item_dialog(self):
+        def _mark_inventory_dirty():
+            self._inventory_dirty = True
+
+        DeleteItemDialog(self, self.controller, on_deleted=_mark_inventory_dirty)
+
     def apply_theme(self):
         c = self.controller.colors
         self.configure(fg_color=c["bg_main"])
@@ -616,6 +699,7 @@ class ProgressFrame(ctk.CTkFrame):
             button_color=c["primary_hover"],
             button_hover_color=c["primary_hover"],
         )
+        self._update_delete_date_button_state()
         self.bottom_bar.configure(fg_color=c["bg_card"], border_color=c["border"])
         self.total_items_label.configure(text_color=c["text_green"])
         self.inventory_btn.configure(fg_color=c["primary"], hover_color=c["primary_hover"])
@@ -624,6 +708,10 @@ class ProgressFrame(ctk.CTkFrame):
         )
         self.export_btn.configure(fg_color=c["accent_green"], hover_color=c["green_hover"])
         self.import_btn.configure(fg_color=c["primary"], hover_color=c["primary_hover"])
+        self.delete_item_btn.configure(
+            fg_color=c.get("danger", "#DC2626"),
+            hover_color=c.get("danger_hover", "#B91C1C"),
+        )
         self.add_item_btn.configure(
             fg_color=c["accent_gold"], hover_color=c["gold_hover"], text_color=c["text_on_gold"]
         )
