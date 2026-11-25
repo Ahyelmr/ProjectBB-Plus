@@ -28,18 +28,51 @@ class OrderRepository:
             conn.commit()
             return next_seq
 
-    def create_order(self, cart_items: dict, total_amount: float, discount_applied: str = "None") -> tuple[int, int]:
+    def create_order(
+        self,
+        cart_items: dict,
+        total_amount: float,
+        discount_applied: str = "None",
+        amount_tendered: float | None = None,
+        change_amount: float | None = None,
+    ) -> tuple[int, int]:
         sequence_number = self.get_next_sequence()
         order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        total_amount = round(float(total_amount), 2)
+        if amount_tendered is None:
+            amount_tendered = total_amount
+        else:
+            amount_tendered = round(float(amount_tendered), 2)
+
+        if change_amount is None:
+            change_amount = round(max(0.0, amount_tendered - total_amount), 2)
+        else:
+            change_amount = round(max(0.0, float(change_amount)), 2)
 
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO orders (sequence_number, order_date, total_amount, discount_applied, status)
-                VALUES (?, ?, ?, ?, 'PREPARING')
+                INSERT INTO orders (
+                    sequence_number,
+                    order_date,
+                    total_amount,
+                    amount_tendered,
+                    change_amount,
+                    discount_applied,
+                    status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 'PREPARING')
                 """,
-                (sequence_number, order_date, total_amount, discount_applied),
+                (
+                    sequence_number,
+                    order_date,
+                    total_amount,
+                    amount_tendered,
+                    change_amount,
+                    discount_applied,
+                ),
             )
             order_id = cursor.lastrowid
 
@@ -151,6 +184,8 @@ class OrderRepository:
                     orders.sequence_number,
                     orders.order_date,
                     orders.total_amount,
+                    COALESCE(orders.amount_tendered, orders.total_amount) AS amount_tendered,
+                    COALESCE(orders.change_amount, 0.0) AS change_amount,
                     COALESCE(orders.discount_applied, 'None') AS discount_applied,
                     orders.status,
                     inventory.name AS item_name,
@@ -176,6 +211,8 @@ class OrderRepository:
                     "sequence_number": row["sequence_number"],
                     "order_date": row["order_date"],
                     "total_amount": row["total_amount"],
+                    "amount_tendered": float(row["amount_tendered"]),
+                    "change_amount": float(row["change_amount"]),
                     "discount_applied": row["discount_applied"],
                     "status": row["status"],
                     "items": [],

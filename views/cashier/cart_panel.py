@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from views.cashier.checkout_dialog import CheckoutDialog
 
 
 class CartPanel(ctk.CTkFrame):
@@ -21,6 +22,8 @@ class CartPanel(ctk.CTkFrame):
         self.controller = controller
         self.on_order_completed = on_order_completed
         self.cart = {}
+        self.current_subtotal = 0.0
+        self.current_discount_amount = 0.0
         self.current_total = 0.0
 
         # Cached row widgets keyed by SKU to avoid full destroy/recreate lag
@@ -30,6 +33,7 @@ class CartPanel(ctk.CTkFrame):
         self._last_total_text = "Total: ₱0.00"
         self._last_admin_role = None
         self._checking_out = False
+        self._checkout_dialog = None
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
@@ -285,7 +289,12 @@ class CartPanel(ctk.CTkFrame):
             elif all_unit_prices:
                 discount_amount = max(all_unit_prices) * 0.20
 
-        grand_total = max(0.0, subtotal - discount_amount)
+        subtotal = round(subtotal, 2)
+        discount_amount = round(discount_amount, 2)
+        grand_total = round(max(0.0, subtotal - discount_amount), 2)
+
+        self.current_subtotal = subtotal
+        self.current_discount_amount = discount_amount
         self.current_total = grand_total
 
         sub_text = f"Subtotal: ₱{subtotal:.2f}"
@@ -307,6 +316,34 @@ class CartPanel(ctk.CTkFrame):
         self._recalculate_totals()
 
     def process_checkout(self) -> None:
+        """Opens the two-stage CheckoutDialog for payment entry and change calculation."""
+        if not self.cart or self._checking_out:
+            return
+
+        if self._checkout_dialog is not None:
+            try:
+                if self._checkout_dialog.winfo_exists():
+                    self._checkout_dialog.lift()
+                    self._checkout_dialog.focus_set()
+                    return
+            except Exception:
+                pass
+            self._checkout_dialog = None
+
+        self._recalculate_totals()
+        self._checkout_dialog = CheckoutDialog(
+            parent=self,
+            controller=self.controller,
+            cart_items=self.cart,
+            subtotal=self.current_subtotal,
+            discount_name=self.discount_var.get(),
+            discount_amount=self.current_discount_amount,
+            total_amount=self.current_total,
+            on_confirm=self._complete_checkout,
+        )
+
+    def _complete_checkout(self, amount_tendered: float, change_amount: float) -> None:
+        """Commits the paid order to DB + receipt printer and pushes it to the Live Kitchen Queue."""
         if not self.cart or self._checking_out:
             return
 
@@ -314,7 +351,13 @@ class CartPanel(ctk.CTkFrame):
         self.checkout_btn.configure(state="disabled")
         try:
             discount_name = self.discount_var.get()
-            self.controller.queue.process_new_transaction(self.cart, self.current_total, discount_name)
+            self.controller.queue.process_new_transaction(
+                self.cart,
+                self.current_total,
+                discount_name,
+                amount_tendered=amount_tendered,
+                change_amount=change_amount,
+            )
 
             self.cart.clear()
             for sku in list(self._row_widgets.keys()):
@@ -331,6 +374,7 @@ class CartPanel(ctk.CTkFrame):
                 self.on_order_completed()
         finally:
             self._checking_out = False
+            self._checkout_dialog = None
             if self.checkout_btn.winfo_exists():
                 self.checkout_btn.configure(state="normal")
 

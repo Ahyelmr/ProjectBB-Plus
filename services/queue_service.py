@@ -21,9 +21,28 @@ class QueueService:
         cart_items: dict,
         total_amount: float,
         discount_applied: str = "None",
+        amount_tendered: float | None = None,
+        change_amount: float | None = None,
     ) -> tuple[int, int]:
         """Saves a new order, prints the thermal receipt, and returns (sequence_number, order_id)."""
-        seq_num, order_id = self.db.create_order(cart_items, total_amount, discount_applied)
+        total_amount = round(float(total_amount), 2)
+        if amount_tendered is None:
+            amount_tendered = total_amount
+        else:
+            amount_tendered = round(float(amount_tendered), 2)
+
+        if change_amount is None:
+            change_amount = round(max(0.0, amount_tendered - total_amount), 2)
+        else:
+            change_amount = round(max(0.0, float(change_amount)), 2)
+
+        seq_num, order_id = self.db.create_order(
+            cart_items,
+            total_amount,
+            discount_applied,
+            amount_tendered=amount_tendered,
+            change_amount=change_amount,
+        )
 
         receipt_items = [
             {
@@ -39,6 +58,8 @@ class QueueService:
             receipt_items,
             total_amount,
             discount_name=discount_applied,
+            amount_tendered=amount_tendered,
+            change_amount=change_amount,
         )
         return seq_num, order_id
 

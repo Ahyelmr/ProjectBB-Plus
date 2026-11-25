@@ -56,8 +56,21 @@ class DatabaseManager:
     def get_next_sequence(self) -> int:
         return self.orders.get_next_sequence()
 
-    def create_order(self, cart_items: dict, total_amount: float, discount_applied: str = "None") -> tuple[int, int]:
-        return self.orders.create_order(cart_items, total_amount, discount_applied)
+    def create_order(
+        self,
+        cart_items: dict,
+        total_amount: float,
+        discount_applied: str = "None",
+        amount_tendered: float | None = None,
+        change_amount: float | None = None,
+    ) -> tuple[int, int]:
+        return self.orders.create_order(
+            cart_items,
+            total_amount,
+            discount_applied,
+            amount_tendered=amount_tendered,
+            change_amount=change_amount,
+        )
 
     def update_order_status(self, order_id: int, status: str) -> None:
         self.orders.update_order_status(order_id, status)

@@ -79,6 +79,8 @@ class DatabaseConnection:
                     sequence_number INTEGER NOT NULL,
                     order_date TEXT NOT NULL,
                     total_amount REAL NOT NULL,
+                    amount_tendered REAL NOT NULL DEFAULT 0.0,
+                    change_amount REAL NOT NULL DEFAULT 0.0,
                     discount_applied TEXT,
                     status TEXT DEFAULT 'PENDING'
                 )
@@ -95,6 +97,19 @@ class DatabaseConnection:
                     FOREIGN KEY (sku) REFERENCES inventory (sku)
                 )
             """)
+
+            # Non-destructive migration for existing databases lacking payment columns
+            cursor.execute("PRAGMA table_info(orders)")
+            existing_order_cols = {row["name"] for row in cursor.fetchall()}
+            if "amount_tendered" not in existing_order_cols:
+                cursor.execute(
+                    "ALTER TABLE orders ADD COLUMN amount_tendered REAL NOT NULL DEFAULT 0.0"
+                )
+                cursor.execute("UPDATE orders SET amount_tendered = total_amount")
+            if "change_amount" not in existing_order_cols:
+                cursor.execute(
+                    "ALTER TABLE orders ADD COLUMN change_amount REAL NOT NULL DEFAULT 0.0"
+                )
 
             # Seed default accounts with PBKDF2-SHA256 hashes
             cursor.execute(

@@ -459,6 +459,8 @@ class ProgressFrame(ctk.CTkFrame):
             discount_note = (
                 f"  (Discount: {order['discount_applied']})" if order["discount_applied"] != "None" else ""
             )
+            amount_tendered = float(order.get("amount_tendered", order["total_amount"]))
+            change_amount = float(order.get("change_amount", 0.0))
 
             card = ctk.CTkFrame(
                 self.data_frame,
@@ -503,7 +505,7 @@ class ProgressFrame(ctk.CTkFrame):
                     text_color=c["text_main"],
                     justify="left",
                     anchor="w",
-                ).grid(row=2, column=0, sticky="nw", padx=(18, 8), pady=(4, 10))
+                ).grid(row=2, column=0, sticky="nw", padx=(18, 8), pady=(4, 6))
 
                 ctk.CTkLabel(
                     card,
@@ -512,7 +514,15 @@ class ProgressFrame(ctk.CTkFrame):
                     text_color=c["text_muted"],
                     justify="right",
                     anchor="e",
-                ).grid(row=2, column=1, sticky="ne", padx=(8, 18), pady=(4, 10))
+                ).grid(row=2, column=1, sticky="ne", padx=(8, 18), pady=(4, 6))
+
+            ctk.CTkLabel(
+                card,
+                text=f"Paid: ₱{amount_tendered:.2f}   •   Change: ₱{change_amount:.2f}",
+                font=f["small"],
+                text_color=c["text_green"],
+                anchor="e",
+            ).grid(row=3, column=0, columnspan=2, sticky="e", padx=18, pady=(0, 10))
 
         if end_idx < len(self.orders_sequence_data):
             self._render_job = self.after(
@@ -554,15 +564,19 @@ class ProgressFrame(ctk.CTkFrame):
                     writer.writerow([
                         "Sequence #", "Order Date/Time", "Status",
                         "Item Name", "Category", "Quantity",
-                        "Unit Price", "Line Total", "Discount Applied", "Order Total",
+                        "Unit Price", "Line Total", "Discount Applied",
+                        "Order Total", "Amount Paid", "Change",
                     ])
                     for order in self.orders_sequence_data:
+                        amount_tendered = float(order.get("amount_tendered", order["total_amount"]))
+                        change_amount = float(order.get("change_amount", 0.0))
                         for item in order["items"]:
                             writer.writerow([
                                 order["sequence_number"], order["order_date"], order["status"],
                                 item["name"], item["category"], item["quantity"],
                                 f"{item['unit_price']:.2f}", f"{item['line_total']:.2f}",
                                 order["discount_applied"], f"{order['total_amount']:.2f}",
+                                f"{amount_tendered:.2f}", f"{change_amount:.2f}",
                             ])
                 messagebox.showinfo("Export Successful", f"Sequential orders log saved to {filepath}")
 
