@@ -13,9 +13,35 @@ class TTSService:
         self._worker_thread = threading.Thread(target=self._audio_worker, daemon=True)
         self._worker_thread.start()
 
-    def announce_order(self, seq_num: int) -> None:
-        """Queues a standard pickup announcement for the given order sequence number."""
-        self.speak(f"Big Boys Order number {seq_num} is ready for pickup.")
+    def announce_order(self, seq_num: int | str, order_type: str | None = None) -> None:
+        """Queues a pickup announcement including Dine In / Take Out and order number."""
+        spoken_type = None
+        parsed_num = seq_num
+
+        if isinstance(seq_num, str):
+            raw = seq_num.strip().upper()
+            if raw.startswith("DI"):
+                spoken_type = "Dine In"
+                num_part = raw[2:].strip()
+                parsed_num = int(num_part) if num_part.isdigit() else num_part
+            elif raw.startswith("TO"):
+                spoken_type = "Take Out"
+                num_part = raw[2:].strip()
+                parsed_num = int(num_part) if num_part.isdigit() else num_part
+            elif raw.isdigit():
+                parsed_num = int(raw)
+
+        if order_type:
+            norm = " ".join(order_type.strip().upper().replace("-", " ").replace("_", " ").split())
+            if norm in ("TAKE OUT", "TAKEOUT", "TO", "TO GO", "TOGO", "TAKEAWAY", "TAKE AWAY"):
+                spoken_type = "Take Out"
+            elif norm in ("DINE IN", "DINEIN", "DI"):
+                spoken_type = "Dine In"
+
+        if spoken_type:
+            self.speak(f"{spoken_type} {parsed_num} is ready for pickup.")
+        else:
+            self.speak(f"{parsed_num} is ready for pickup.")
 
     def speak(self, message: str) -> None:
         """Pushes any announcement string onto the background TTS queue."""

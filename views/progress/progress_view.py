@@ -240,6 +240,23 @@ class ProgressFrame(ctk.CTkFrame):
 
         self.bind("<Configure>", self._on_configure)
 
+    @staticmethod
+    def _normalize_order_type(order_type: str | None) -> str:
+        norm = " ".join(
+            (order_type or "DINE IN").strip().upper().replace("-", " ").replace("_", " ").split()
+        )
+        if norm in ("TAKE OUT", "TAKEOUT", "TO", "TO GO", "TOGO", "TAKEAWAY", "TAKE AWAY"):
+            return "TAKE OUT"
+        return "DINE IN"
+
+    @classmethod
+    def _format_order_code(cls, order_type: str, seq_num: int) -> str:
+        prefix = "TO" if cls._normalize_order_type(order_type) == "TAKE OUT" else "DI"
+        return f"{prefix} {int(seq_num):03d}"
+
+    @classmethod
+    def _format_order_type_label(cls, order_type: str) -> str:
+        return "Take Out" if cls._normalize_order_type(order_type) == "TAKE OUT" else "Dine In"
     def _on_configure(self, event) -> None:
         if event.widget is self:
             self.header.scale_logo_for_height(event.height, 38, 54, 0.06)
@@ -320,7 +337,7 @@ class ProgressFrame(ctk.CTkFrame):
         current = self._get_selected_date()
         if current in self._available_dates:
             idx = self._available_dates.index(current)
-            if idx + 1 < len(self._available_dates):  # list is newest-first
+            if idx + 1 < len(self._available_dates):
                 self.date_var.set(self._format_date_option(self._available_dates[idx + 1]))
                 self._on_date_changed()
 
@@ -330,7 +347,7 @@ class ProgressFrame(ctk.CTkFrame):
         current = self._get_selected_date()
         if current in self._available_dates:
             idx = self._available_dates.index(current)
-            if idx - 1 >= 0:  # list is newest-first
+            if idx - 1 >= 0:
                 self.date_var.set(self._format_date_option(self._available_dates[idx - 1]))
                 self._on_date_changed()
 
@@ -532,6 +549,11 @@ class ProgressFrame(ctk.CTkFrame):
             status_color = (
                 c["text_green"] if status == "COMPLETED" else "#60A5FA" if status == "READY" else c["accent_gold"]
             )
+            order_type = order.get("order_type", "DINE IN")
+            order_code = order.get("order_code") or self._format_order_code(
+                order_type, order["sequence_number"]
+            )
+            order_type_label = self._format_order_type_label(order_type)
             time_str = order["order_date"].split(" ")[-1] if " " in order["order_date"] else order["order_date"]
             discount_note = (
                 f"  (Discount: {order['discount_applied']})" if order["discount_applied"] != "None" else ""
@@ -552,7 +574,7 @@ class ProgressFrame(ctk.CTkFrame):
 
             ctk.CTkLabel(
                 card,
-                text=f"Order #{order['sequence_number']}   •   {time_str}   •   [{status}]",
+                text=f"{order_code} ({order_type_label})   •   {time_str}   •   [{status}]",
                 font=f["subheader"],
                 text_color=status_color,
             ).grid(row=0, column=0, sticky="w", padx=(14, 8), pady=(10, 4))
@@ -630,6 +652,8 @@ class ProgressFrame(ctk.CTkFrame):
         cashier_name = getattr(self.controller, "current_user", None) or "Cashier"
 
         total_orders = len(orders_data)
+        dine_in_orders = 0
+        take_out_orders = 0
         total_gross_sales = 0.0
         total_discounts = 0.0
         total_net_sales = 0.0
@@ -640,6 +664,7 @@ class ProgressFrame(ctk.CTkFrame):
             # Section 1: Order Log
             writer.writerow([
                 "Order ID",
+                "Order Type",
                 "Time",
                 "Cashier",
                 "Subtotal",
@@ -650,7 +675,16 @@ class ProgressFrame(ctk.CTkFrame):
             ])
 
             for order in orders_data:
-                order_id_str = f"#{int(order['sequence_number']):03d}"
+                raw_type = order.get("order_type", "DINE IN")
+                order_code = order.get("order_code") or self._format_order_code(
+                    raw_type, order["sequence_number"]
+                )
+                order_type_label = self._format_order_type_label(raw_type)
+
+                if order_type_label == "Take Out":
+                    take_out_orders += 1
+                else:
+                    dine_in_orders += 1
 
                 raw_dt = order.get("order_date", "")
                 try:
@@ -673,7 +707,8 @@ class ProgressFrame(ctk.CTkFrame):
                 total_net_sales += final_total
 
                 writer.writerow([
-                    order_id_str,
+                    order_code,
+                    order_type_label,
                     time_str,
                     cashier_name,
                     f"{subtotal:.2f}",
@@ -687,6 +722,8 @@ class ProgressFrame(ctk.CTkFrame):
             writer.writerow([])
             writer.writerow(["DAILY SUMMARY"])
             writer.writerow(["Total Orders:", total_orders])
+            writer.writerow(["Dine In Orders:", dine_in_orders])
+            writer.writerow(["Take Out Orders:", take_out_orders])
             writer.writerow(["Total Gross Sales:", f"{total_gross_sales:.2f}"])
             writer.writerow(["Total Discounts:", f"{total_discounts:.2f}"])
             writer.writerow(["Total Net Sales:", f"{total_net_sales:.2f}"])
@@ -774,7 +811,6 @@ class ProgressFrame(ctk.CTkFrame):
             scrollbar_button_hover_color=c["text_muted"],
         )
 
-        # Avoid burning CPU rebuilding hidden progress rows while user is in Settings
         if self.winfo_viewable():
             self._theme_dirty = False
             self.load_daily_data(keep_selected_date=True)

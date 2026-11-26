@@ -219,8 +219,8 @@ class CashierFrame(ctk.CTkFrame):
     def update_cart_display(self) -> None:
         self.cart_panel.update_display()
 
-    def announce_order(self, seq_num: int) -> None:
-        self.controller.tts.announce_order(seq_num)
+    def announce_order(self, seq_num: int | str, order_type: str | None = None) -> None:
+        self.controller.tts.announce_order(seq_num, order_type=order_type)
 
     def apply_theme(self) -> None:
         c = self.controller.colors

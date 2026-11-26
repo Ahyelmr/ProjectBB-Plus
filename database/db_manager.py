@@ -56,8 +56,11 @@ class DatabaseManager:
         self.inventory.import_from_csv(filepath)
 
     # --- Orders ---
-    def get_next_sequence(self) -> int:
-        return self.orders.get_next_sequence()
+    format_order_code = staticmethod(OrderRepository.format_order_code)
+    normalize_order_type = staticmethod(OrderRepository.normalize_order_type)
+
+    def get_next_sequence(self, order_type: str = "DINE IN") -> int:
+        return self.orders.get_next_sequence(order_type=order_type)
 
     def create_order(
         self,
@@ -66,6 +69,7 @@ class DatabaseManager:
         discount_applied: str = "None",
         amount_tendered: float | None = None,
         change_amount: float | None = None,
+        order_type: str = "DINE IN",
     ) -> tuple[int, int]:
         return self.orders.create_order(
             cart_items,
@@ -73,6 +77,7 @@ class DatabaseManager:
             discount_applied,
             amount_tendered=amount_tendered,
             change_amount=change_amount,
+            order_type=order_type,
         )
 
     def update_order_status(self, order_id: int, status: str) -> None:

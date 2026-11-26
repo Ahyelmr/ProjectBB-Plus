@@ -5,26 +5,59 @@ class OrderRepository:
     def __init__(self, db_conn):
         self._conn = db_conn
 
-    def get_next_sequence(self) -> int:
+    @staticmethod
+    def normalize_order_type(order_type: str | None) -> str:
+        norm = (order_type or "DINE IN").strip().upper().replace("-", " ").replace("_", " ")
+        norm = " ".join(norm.split())
+        if norm in ("TAKE OUT", "TAKEOUT", "TO", "TO GO", "TOGO", "TAKEAWAY", "TAKE AWAY"):
+            return "TAKE OUT"
+        return "DINE IN"
+
+    @classmethod
+    def format_order_code(cls, order_type: str | None, sequence_number: int) -> str:
+        norm = cls.normalize_order_type(order_type)
+        prefix = "TO" if norm == "TAKE OUT" else "DI"
+        return f"{prefix} {int(sequence_number):03d}"
+
+    @staticmethod
+    def _allocate_sequence_in_tx(cursor, date_str: str, norm_type: str) -> int:
+        """Computes the next sequence strictly from today's orders of norm_type and syncs daily_sequence."""
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(sequence_number), 0) AS max_seq
+            FROM orders
+            WHERE order_date LIKE ?
+              AND CASE
+                    WHEN UPPER(REPLACE(REPLACE(COALESCE(order_type, 'DINE IN'), '-', ' '), '_', ' '))
+                         IN ('TAKE OUT', 'TAKEOUT', 'TO', 'TO GO', 'TOGO', 'TAKEAWAY', 'TAKE AWAY')
+                    THEN 'TAKE OUT'
+                    ELSE 'DINE IN'
+                  END = ?
+            """,
+            (date_str + "%", norm_type),
+        )
+        actual_max = int(cursor.fetchone()["max_seq"] or 0)
+        next_seq = actual_max + 1
+
+        cursor.execute(
+            """
+            INSERT INTO daily_sequence (date_str, order_type, last_sequence)
+            VALUES (?, ?, ?)
+            ON CONFLICT(date_str, order_type)
+            DO UPDATE SET last_sequence = excluded.last_sequence
+            """,
+            (date_str, norm_type, next_seq),
+        )
+        return next_seq
+
+    def get_next_sequence(self, order_type: str = "DINE IN") -> int:
         today_str = datetime.now().strftime("%Y-%m-%d")
+        norm_type = self.normalize_order_type(order_type)
+
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT last_sequence FROM daily_sequence WHERE date_str = ?", (today_str,))
-            row = cursor.fetchone()
-
-            if row:
-                next_seq = row["last_sequence"] + 1
-                cursor.execute(
-                    "UPDATE daily_sequence SET last_sequence = ? WHERE date_str = ?",
-                    (next_seq, today_str),
-                )
-            else:
-                next_seq = 1
-                cursor.execute(
-                    "INSERT INTO daily_sequence (date_str, last_sequence) VALUES (?, ?)",
-                    (today_str, next_seq),
-                )
-
+            cursor.execute("BEGIN IMMEDIATE")
+            next_seq = self._allocate_sequence_in_tx(cursor, today_str, norm_type)
             conn.commit()
             return next_seq
 
@@ -35,9 +68,12 @@ class OrderRepository:
         discount_applied: str = "None",
         amount_tendered: float | None = None,
         change_amount: float | None = None,
+        order_type: str = "DINE IN",
     ) -> tuple[int, int]:
-        sequence_number = self.get_next_sequence()
-        order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        norm_type = self.normalize_order_type(order_type)
+        now = datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        order_date = now.strftime("%Y-%m-%d %H:%M:%S")
 
         total_amount = round(float(total_amount), 2)
         if amount_tendered is None:
@@ -52,10 +88,14 @@ class OrderRepository:
 
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
+            sequence_number = self._allocate_sequence_in_tx(cursor, today_str, norm_type)
+
             cursor.execute(
                 """
                 INSERT INTO orders (
                     sequence_number,
+                    order_type,
                     order_date,
                     total_amount,
                     amount_tendered,
@@ -63,10 +103,11 @@ class OrderRepository:
                     discount_applied,
                     status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 'PREPARING')
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'PREPARING')
                 """,
                 (
                     sequence_number,
+                    norm_type,
                     order_date,
                     total_amount,
                     amount_tendered,
@@ -102,6 +143,7 @@ class OrderRepository:
                 SELECT
                     orders.order_id,
                     orders.sequence_number,
+                    COALESCE(orders.order_type, 'DINE IN') AS order_type,
                     orders.status,
                     order_items.quantity,
                     inventory.name AS item_name,
@@ -110,7 +152,7 @@ class OrderRepository:
                 JOIN order_items ON orders.order_id = order_items.order_id
                 JOIN inventory ON order_items.sku = inventory.sku
                 WHERE orders.status IN ('PREPARING', 'PENDING', 'READY')
-                ORDER BY orders.sequence_number ASC, orders.order_id ASC, order_items.item_id ASC
+                ORDER BY orders.order_id ASC, order_items.item_id ASC
             """)
             rows = cursor.fetchall()
 
@@ -118,9 +160,12 @@ class OrderRepository:
         for row in rows:
             oid = row["order_id"]
             if oid not in orders_map:
+                otype = self.normalize_order_type(row["order_type"])
                 orders_map[oid] = {
                     "order_id": oid,
                     "sequence_number": row["sequence_number"],
+                    "order_type": otype,
+                    "order_code": self.format_order_code(otype, row["sequence_number"]),
                     "status": row["status"],
                     "items": [],
                 }
@@ -228,7 +273,7 @@ class OrderRepository:
             ]
 
     def get_daily_orders_sequence(self, date_str: str) -> list[dict]:
-        """Returns all orders on date_str in sequence with line-item details."""
+        """Returns all orders on date_str in chronological sequence with line-item details."""
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -236,6 +281,7 @@ class OrderRepository:
                 SELECT
                     orders.order_id,
                     orders.sequence_number,
+                    COALESCE(orders.order_type, 'DINE IN') AS order_type,
                     orders.order_date,
                     orders.total_amount,
                     COALESCE(orders.amount_tendered, orders.total_amount) AS amount_tendered,
@@ -250,7 +296,7 @@ class OrderRepository:
                 JOIN order_items ON orders.order_id = order_items.order_id
                 JOIN inventory ON order_items.sku = inventory.sku
                 WHERE orders.order_date LIKE ?
-                ORDER BY orders.sequence_number ASC, orders.order_id ASC, order_items.item_id ASC
+                ORDER BY orders.order_id ASC, order_items.item_id ASC
                 """,
                 (date_str + "%",),
             )
@@ -260,9 +306,12 @@ class OrderRepository:
         for row in rows:
             oid = row["order_id"]
             if oid not in orders_map:
+                otype = self.normalize_order_type(row["order_type"])
                 orders_map[oid] = {
                     "order_id": oid,
                     "sequence_number": row["sequence_number"],
+                    "order_type": otype,
+                    "order_code": self.format_order_code(otype, row["sequence_number"]),
                     "order_date": row["order_date"],
                     "total_amount": row["total_amount"],
                     "amount_tendered": float(row["amount_tendered"]),

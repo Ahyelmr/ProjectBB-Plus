@@ -43,6 +43,22 @@ class CartPanel(ctk.CTkFrame):
         )
         self.order_header.grid(row=0, column=0, pady=(10, 4))
 
+        self.order_type_var = ctk.StringVar(value="Dine In")
+        self.order_type_selector = ctk.CTkSegmentedButton(
+            self,
+            values=["Dine In", "Take Out"],
+            variable=self.order_type_var,
+            font=f["button"],
+            fg_color=c["bg_input"],
+            selected_color=c["primary"],
+            selected_hover_color=c["primary_hover"],
+            unselected_color=c["bg_input"],
+            unselected_hover_color=c["border"],
+            text_color="#FFFFFF",
+            height=32,
+        )
+        self.order_type_selector.grid(row=1, column=0, pady=(2, 6), padx=12, sticky="ew")
+
         self.cart_list_frame = ctk.CTkScrollableFrame(
             self,
             fg_color=c["bg_input"],
@@ -351,18 +367,21 @@ class CartPanel(ctk.CTkFrame):
         self.checkout_btn.configure(state="disabled")
         try:
             discount_name = self.discount_var.get()
+            selected_order_type = self.order_type_var.get()
             self.controller.queue.process_new_transaction(
                 self.cart,
                 self.current_total,
                 discount_name,
                 amount_tendered=amount_tendered,
                 change_amount=change_amount,
+                order_type=selected_order_type,
             )
 
             self.cart.clear()
             for sku in list(self._row_widgets.keys()):
                 self._remove_row(sku)
             self.discount_var.set("None")
+            self.order_type_var.set("Dine In")
             self._recalculate_totals()
 
             try:
@@ -403,6 +422,13 @@ class CartPanel(ctk.CTkFrame):
         f = self.controller.fonts
 
         self.configure(fg_color=c["bg_card"], border_color=c["border"])
+        self.order_type_selector.configure(
+            fg_color=c["bg_input"],
+            selected_color=c["primary"],
+            selected_hover_color=c["primary_hover"],
+            unselected_color=c["bg_input"],
+            unselected_hover_color=c["border"],
+        )
         self.cart_list_frame.configure(
             fg_color=c["bg_input"],
             scrollbar_button_color=c["border"],
