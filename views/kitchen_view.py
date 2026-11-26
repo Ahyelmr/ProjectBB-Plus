@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from tkinter import messagebox
 from components.page_header import PageHeader
 
 
@@ -455,6 +456,26 @@ class KitchenFrame(ctk.CTkFrame):
         ).pack(fill="x", padx=14, pady=(2, 10))
         return card
 
+    def _reprint_order(self, order_id: int, btn: ctk.CTkButton):
+        if btn.winfo_exists():
+            btn.configure(state="disabled", text="Printing...")
+
+        success, message = self.controller.queue.reprint_order(order_id)
+        if not btn.winfo_exists():
+            return
+
+        if success:
+            btn.configure(text="Printed")
+            self.after(
+                1500,
+                lambda b=btn: b.configure(state="normal", text="Reprint")
+                if b.winfo_exists()
+                else None,
+            )
+        else:
+            btn.configure(state="normal", text="Reprint")
+            messagebox.showwarning("Reprint Failed", message)
+
     def _create_prep_card(self, order: dict):
         c = self.controller.colors
         f = self.controller.fonts
@@ -472,8 +493,29 @@ class KitchenFrame(ctk.CTkFrame):
             self.prep_column, order, accent, status_text, accent, status_fg
         )
 
+        btn_frame = ctk.CTkFrame(card, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=12, pady=(0, 12))
+        btn_frame.grid_columnconfigure(0, weight=1)
+        btn_frame.grid_columnconfigure(1, weight=2)
+
+        reprint_btn = ctk.CTkButton(
+            btn_frame,
+            text="Reprint",
+            height=36,
+            font=f["button"],
+            fg_color=c["bg_card"],
+            hover_color=c["border"],
+            border_width=1,
+            border_color=c["border"],
+            text_color=c["text_main"],
+        )
+        reprint_btn.configure(
+            command=lambda oid=order_id, b=reprint_btn: self._reprint_order(oid, b)
+        )
+        reprint_btn.grid(row=0, column=0, padx=4, sticky="ew")
+
         ctk.CTkButton(
-            card,
+            btn_frame,
             text="Move to Ready",
             height=36,
             font=f["button"],
@@ -483,7 +525,7 @@ class KitchenFrame(ctk.CTkFrame):
             command=lambda oid=order_id, seq=seq_num, otype=order_type: self._mark_ready(
                 oid, seq, otype
             ),
-        ).pack(fill="x", padx=14, pady=(0, 12))
+        ).grid(row=0, column=1, padx=4, sticky="ew")
 
     def _create_ready_card(self, order: dict):
         c = self.controller.colors

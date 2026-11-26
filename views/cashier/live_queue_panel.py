@@ -1,3 +1,4 @@
+from tkinter import messagebox
 import customtkinter as ctk
 from components.split_pane import VerticalSplitter
 
@@ -452,6 +453,26 @@ class LiveQueuePanel(ctk.CTkFrame):
         )
         qty_pill.pack(side="left")
 
+    def _reprint_order(self, order_id: int, btn: ctk.CTkButton) -> None:
+        if btn.winfo_exists():
+            btn.configure(state="disabled", text="Printing...")
+
+        success, message = self.controller.queue.reprint_order(order_id)
+        if not btn.winfo_exists():
+            return
+
+        if success:
+            btn.configure(text="Printed")
+            self.after(
+                1500,
+                lambda b=btn: b.configure(state="normal", text="Reprint")
+                if b.winfo_exists()
+                else None,
+            )
+        else:
+            btn.configure(state="normal", text="Reprint")
+            messagebox.showwarning("Reprint Failed", message)
+
     def _mark_ready(self, order_id: int, seq_num: int, queue_key: str) -> None:
         self.controller.queue.mark_order_ready(order_id, seq_num, order_type=queue_key)
         self.refresh(force=True)
@@ -519,8 +540,29 @@ class LiveQueuePanel(ctk.CTkFrame):
             anchor="w",
         ).pack(fill="x", padx=8, pady=(0, 6))
 
+        btn_row = ctk.CTkFrame(card, fg_color="transparent")
+        btn_row.pack(fill="x", padx=8, pady=(0, 8))
+        btn_row.grid_columnconfigure(0, weight=1)
+        btn_row.grid_columnconfigure(1, weight=2)
+
+        reprint_btn = ctk.CTkButton(
+            btn_row,
+            text="Reprint",
+            height=28,
+            font=f["small"],
+            fg_color=c["bg_input"],
+            hover_color=c["border"],
+            border_width=1,
+            border_color=c["border"],
+            text_color=c["text_main"],
+        )
+        reprint_btn.configure(
+            command=lambda oid=order_id, b=reprint_btn: self._reprint_order(oid, b)
+        )
+        reprint_btn.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+
         ctk.CTkButton(
-            card,
+            btn_row,
             text="Move to Ready",
             height=28,
             font=f["small"],
@@ -528,7 +570,7 @@ class LiveQueuePanel(ctk.CTkFrame):
             hover_color=c["gold_hover"],
             text_color=c["text_on_gold"],
             command=lambda oid=order_id, seq=seq_num, qk=queue_key: self._mark_ready(oid, seq, qk),
-        ).pack(fill="x", padx=8, pady=(0, 8))
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0))
 
     def _create_ready_card(self, order: dict) -> None:
         c = self.controller.colors

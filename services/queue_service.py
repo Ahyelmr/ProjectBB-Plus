@@ -88,6 +88,30 @@ class QueueService:
         )
         return seq_num, order_id
 
+    def reprint_order(self, order_id: int) -> tuple[bool, str]:
+        """Reprints the thermal receipt for an existing order by order_id."""
+        order = self.db.get_order_for_receipt(order_id)
+        if not order:
+            return False, f"Order #{order_id} could not be found in the database."
+
+        printed = self.printer.print_receipt(
+            order["sequence_number"],
+            order["items"],
+            order["total_amount"],
+            discount_name=order["discount_applied"],
+            amount_tendered=order["amount_tendered"],
+            change_amount=order["change_amount"],
+            order_type=order["order_type"],
+            order_date=order["order_date"],
+            is_reprint=True,
+        )
+        if printed:
+            return True, f"Reprinted receipt for {order['order_code']}."
+        return (
+            False,
+            f"Could not print {order['order_code']}. Check that printer '{self.printer.printer_name}' is connected and ready.",
+        )
+
     def mark_order_ready(
         self,
         order_id: int,

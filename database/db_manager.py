@@ -86,6 +86,9 @@ class DatabaseManager:
     def get_active_orders(self, include_category: bool = False) -> list[dict]:
         return self.orders.get_active_orders(include_category=include_category)
 
+    def get_order_for_receipt(self, order_id: int) -> dict | None:
+        return self.orders.get_order_for_receipt(order_id)
+
     def get_available_order_dates(self) -> list[str]:
         return self.orders.get_available_order_dates()
 

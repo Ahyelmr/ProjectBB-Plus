@@ -15,7 +15,9 @@ class PrinterService:
 
     @staticmethod
     def _format_order_header(seq_num: int, order_type: str = "DINE IN") -> tuple[str, str]:
-        norm = " ".join((order_type or "DINE IN").strip().upper().replace("-", " ").replace("_", " ").split())
+        norm = " ".join(
+            (order_type or "DINE IN").strip().upper().replace("-", " ").replace("_", " ").split()
+        )
         if norm in ("TAKE OUT", "TAKEOUT", "TO", "TO GO", "TOGO", "TAKEAWAY", "TAKE AWAY"):
             return "TAKE OUT", f"TO {int(seq_num):03d}"
         return "DINE IN", f"DI {int(seq_num):03d}"
@@ -29,19 +31,28 @@ class PrinterService:
         amount_tendered: float | None = None,
         change_amount: float | None = None,
         order_type: str = "DINE IN",
+        order_date: str | None = None,
+        is_reprint: bool = False,
     ) -> str:
-        """Formats the 58mm thermal receipt text for an order."""
-        date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        """Formats the 58mm thermal receipt text for a new or reprinted order."""
+        date_str = order_date or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         divider = "-" * self.RECEIPT_WIDTH
         display_type, order_code = self._format_order_header(seq_num, order_type)
 
-        lines = [
-            "--- PROJECTBB PLUS ---",
-            f"Date: {date_str}",
+        lines = ["--- PROJECTBB PLUS ---"]
+        if is_reprint:
+            lines.append("*** REPRINT COPY ***".center(self.RECEIPT_WIDTH))
+
+        lines.append(f"Date: {date_str}")
+        if is_reprint:
+            reprint_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            lines.append(f"Reprinted: {reprint_str}")
+
+        lines.extend([
             f"Order Type: {display_type}",
             f"Queue Number: {order_code}",
             divider,
-        ]
+        ])
 
         subtotal = 0.0
         for item in cart_items:
@@ -93,6 +104,8 @@ class PrinterService:
         amount_tendered: float | None = None,
         change_amount: float | None = None,
         order_type: str = "DINE IN",
+        order_date: str | None = None,
+        is_reprint: bool = False,
     ) -> bool:
         """Sends the formatted receipt text directly to the configured Windows printer."""
         receipt_text = self.format_receipt(
@@ -103,6 +116,8 @@ class PrinterService:
             amount_tendered=amount_tendered,
             change_amount=change_amount,
             order_type=order_type,
+            order_date=order_date,
+            is_reprint=is_reprint,
         )
 
         if win32print is None:
@@ -110,9 +125,10 @@ class PrinterService:
             return False
 
         try:
+            doc_title = "ProjectBB Receipt (Reprint)" if is_reprint else "ProjectBB Receipt"
             hprinter = win32print.OpenPrinter(self.printer_name)
             try:
-                win32print.StartDocPrinter(hprinter, 1, ("ProjectBB Receipt", None, "RAW"))
+                win32print.StartDocPrinter(hprinter, 1, (doc_title, None, "RAW"))
                 try:
                     win32print.StartPagePrinter(hprinter)
                     win32print.WritePrinter(hprinter, receipt_text.encode("utf-8"))

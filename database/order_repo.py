@@ -175,6 +175,70 @@ class OrderRepository:
                 orders_map[oid]["items"].append((row["quantity"], row["item_name"]))
         return list(orders_map.values())
 
+    def get_order_for_receipt(self, order_id: int) -> dict | None:
+        """Fetches full order header and line items for printing or reprinting a receipt."""
+        with self._conn.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    order_id,
+                    sequence_number,
+                    COALESCE(order_type, 'DINE IN') AS order_type,
+                    order_date,
+                    total_amount,
+                    COALESCE(amount_tendered, total_amount) AS amount_tendered,
+                    COALESCE(change_amount, 0.0) AS change_amount,
+                    COALESCE(discount_applied, 'None') AS discount_applied,
+                    status
+                FROM orders
+                WHERE order_id = ?
+                """,
+                (order_id,),
+            )
+            header = cursor.fetchone()
+            if not header:
+                return None
+
+            cursor.execute(
+                """
+                SELECT
+                    order_items.sku,
+                    COALESCE(inventory.name, order_items.sku) AS item_name,
+                    order_items.quantity,
+                    COALESCE(order_items.price_per_unit, inventory.price, 0.0) AS unit_price
+                FROM order_items
+                LEFT JOIN inventory ON order_items.sku = inventory.sku
+                WHERE order_items.order_id = ?
+                ORDER BY order_items.item_id ASC
+                """,
+                (order_id,),
+            )
+            item_rows = cursor.fetchall()
+
+        otype = self.normalize_order_type(header["order_type"])
+        return {
+            "order_id": header["order_id"],
+            "sequence_number": header["sequence_number"],
+            "order_type": otype,
+            "order_code": self.format_order_code(otype, header["sequence_number"]),
+            "order_date": header["order_date"],
+            "total_amount": float(header["total_amount"]),
+            "amount_tendered": float(header["amount_tendered"]),
+            "change_amount": float(header["change_amount"]),
+            "discount_applied": header["discount_applied"],
+            "status": header["status"],
+            "items": [
+                {
+                    "sku": row["sku"],
+                    "name": row["item_name"],
+                    "price": float(row["unit_price"]),
+                    "quantity": int(row["quantity"]),
+                }
+                for row in item_rows
+            ],
+        }
+
     def get_available_order_dates(self) -> list[str]:
         """Returns distinct YYYY-MM-DD dates from orders (newest first), always including today."""
         today_str = datetime.now().strftime("%Y-%m-%d")
