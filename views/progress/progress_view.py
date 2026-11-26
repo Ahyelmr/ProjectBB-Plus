@@ -610,52 +610,95 @@ class ProgressFrame(ctk.CTkFrame):
         selected_date = self._get_selected_date()
         date_stamp = selected_date.replace("-", "")
 
-        if self.current_view == "Items Sold Summary":
-            if not self.daily_tally:
-                messagebox.showwarning(
-                    "No Data", f"There are no completed item orders to export for {selected_date}."
-                )
-                return
-            filepath = filedialog.asksaveasfilename(
-                defaultextension=".csv", initialfile=f"item_tally_{date_stamp}.csv"
+        orders_data = self.controller.db.get_daily_orders_sequence(selected_date)
+        tally_data = self.controller.db.get_daily_item_tally(selected_date)
+
+        if not orders_data and not tally_data:
+            messagebox.showwarning(
+                "No Data", f"There are no sales records to export for {selected_date}."
             )
-            if filepath:
-                with open(filepath, mode="w", newline="", encoding="utf-8") as file:
-                    writer = csv.writer(file)
-                    writer.writerow(["Date", "Item Name", "Quantity Sold", "Total Amount Earned"])
-                    for item_name, qty_sold, item_earned in self.daily_tally:
-                        writer.writerow([selected_date, item_name, qty_sold, f"{item_earned:.2f}"])
-                messagebox.showinfo("Export Successful", f"Item tally saved to {filepath}")
-        else:
-            if not self.orders_sequence_data:
-                messagebox.showwarning(
-                    "No Data", f"There are no sequential orders to export for {selected_date}."
+            return
+
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            initialfile=f"daily_sales_report_{date_stamp}.csv",
+            filetypes=[("CSV Files", "*.csv")],
+        )
+        if not filepath:
+            return
+
+        cashier_name = getattr(self.controller, "current_user", None) or "Cashier"
+
+        total_orders = len(orders_data)
+        total_gross_sales = 0.0
+        total_discounts = 0.0
+        total_net_sales = 0.0
+
+        with open(filepath, mode="w", newline="", encoding="utf-8-sig") as file:
+            writer = csv.writer(file)
+
+            # Section 1: Order Log
+            writer.writerow([
+                "Order ID",
+                "Time",
+                "Cashier",
+                "Subtotal",
+                "Discount",
+                "Final Total",
+                "Items Ordered",
+                "Status",
+            ])
+
+            for order in orders_data:
+                order_id_str = f"#{int(order['sequence_number']):03d}"
+
+                raw_dt = order.get("order_date", "")
+                try:
+                    dt_obj = datetime.strptime(raw_dt, "%Y-%m-%d %H:%M:%S")
+                    time_str = dt_obj.strftime("%I:%M:%S %p").lstrip("0")
+                except ValueError:
+                    time_str = raw_dt.split(" ")[-1] if " " in raw_dt else raw_dt
+
+                items = order.get("items", [])
+                subtotal = round(sum(float(item["line_total"]) for item in items), 2)
+                final_total = round(float(order["total_amount"]), 2)
+                discount = round(max(0.0, subtotal - final_total), 2)
+
+                items_ordered_str = ", ".join(
+                    f"{item['quantity']}x {item['name']}" for item in items
                 )
-                return
-            filepath = filedialog.asksaveasfilename(
-                defaultextension=".csv", initialfile=f"orders_sequence_{date_stamp}.csv"
-            )
-            if filepath:
-                with open(filepath, mode="w", newline="", encoding="utf-8") as file:
-                    writer = csv.writer(file)
-                    writer.writerow([
-                        "Sequence #", "Order Date/Time", "Status",
-                        "Item Name", "Category", "Quantity",
-                        "Unit Price", "Line Total", "Discount Applied",
-                        "Order Total", "Amount Paid", "Change",
-                    ])
-                    for order in self.orders_sequence_data:
-                        amount_tendered = float(order.get("amount_tendered", order["total_amount"]))
-                        change_amount = float(order.get("change_amount", 0.0))
-                        for item in order["items"]:
-                            writer.writerow([
-                                order["sequence_number"], order["order_date"], order["status"],
-                                item["name"], item["category"], item["quantity"],
-                                f"{item['unit_price']:.2f}", f"{item['line_total']:.2f}",
-                                order["discount_applied"], f"{order['total_amount']:.2f}",
-                                f"{amount_tendered:.2f}", f"{change_amount:.2f}",
-                            ])
-                messagebox.showinfo("Export Successful", f"Sequential orders log saved to {filepath}")
+
+                total_gross_sales += subtotal
+                total_discounts += discount
+                total_net_sales += final_total
+
+                writer.writerow([
+                    order_id_str,
+                    time_str,
+                    cashier_name,
+                    f"{subtotal:.2f}",
+                    f"{discount:.2f}",
+                    f"{final_total:.2f}",
+                    items_ordered_str,
+                    order["status"],
+                ])
+
+            # Section 2: Daily Summary
+            writer.writerow([])
+            writer.writerow(["DAILY SUMMARY"])
+            writer.writerow(["Total Orders:", total_orders])
+            writer.writerow(["Total Gross Sales:", f"{total_gross_sales:.2f}"])
+            writer.writerow(["Total Discounts:", f"{total_discounts:.2f}"])
+            writer.writerow(["Total Net Sales:", f"{total_net_sales:.2f}"])
+
+            # Section 3: Itemized Tally
+            writer.writerow([])
+            writer.writerow(["ITEMIZED TALLY"])
+            writer.writerow(["Item Name", "Quantity Sold", "Total Earned"])
+            for item_name, qty_sold, item_earned in tally_data:
+                writer.writerow([item_name, qty_sold, f"{item_earned:.2f}"])
+
+        messagebox.showinfo("Export Successful", f"Daily sales report saved to {filepath}")
 
     def upload_csv(self):
         filepath = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
